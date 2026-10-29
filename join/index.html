@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a game · Working German Board Game</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: #2a1b10; color: #ede6d8; font-family: Georgia, serif; }
+  .card { max-width: 420px; margin: 16px; padding: 28px; border: 3px solid #c9a04a; border-radius: 12px;
+          background: #3b2716; text-align: center; }
+  h1 { color: #f1d58a; font-size: 22px; margin: 0 0 8px; }
+  .code { font-size: 36px; letter-spacing: 2px; color: #f1d58a; margin: 12px 0 20px; }
+  a.btn { display: block; margin: 10px 0; padding: 14px; border-radius: 10px; text-decoration: none;
+          font-weight: bold; font-size: 17px; border: 2px solid #c9a04a; }
+  .go { background: #2e6b3a; color: #fff; }
+  .get { background: #4a3020; color: #f1d58a; }
+  p { font-size: 14px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>You're invited to a game</h1>
+  <div>Room</div>
+  <div class="code" id="code">…</div>
+  <a class="btn go" id="open" href="#">Open in the game</a>
+  <a class="btn get" href="https://github.com/cyclistmass/wgbg/releases/latest/download/working-german-board-game.apk">Get the game (Android)</a>
+  <p>Don't have it yet? Install it, then come back and tap <b>Open in the game</b>,
+     or open the game and type the room code under <b>Join a room</b>.</p>
+</div>
+<script>
+  var code = decodeURIComponent((location.hash || "").replace(/^#/, "")).toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  document.getElementById("code").textContent = code || "(no code)";
+  document.getElementById("open").href = "wgbg://join/" + code;
+</script>
+</body>
+</html>
