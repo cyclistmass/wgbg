@@ -1,13 +1,13 @@
 # Working German Board Game
 
-A multiplayer board game of hex tiles, resources, trading and building, for Android. Play 2 to 6 players with friends
+A multiplayer board game of hex tiles, resources, trading and building, for Android and the web. Play 2 to 6 players with friends
 online or against the built-in bots. It plays by rules compatible with the classic German settlement-building game.
 It is not affiliated with or endorsed by Catan GmbH: see [Trademarks](#trademarks).
 
-**Play it:** [download the Android APK](https://github.com/cyclistmass/wgbg/releases/latest/download/working-german-board-game.apk)
+**Play it:** [in your browser](https://cyclistmass.github.io/wgbg/play/) · [download the Android APK](https://github.com/cyclistmass/wgbg/releases/latest/download/working-german-board-game.apk)
 · [all releases](https://github.com/cyclistmass/wgbg/releases)
 
-This repository holds the game's releases and the page that opens invite links (`join/`). The game tells you in-app
+This repository holds the game's releases, the web game (`play/`) and the page that opens invite links (`join/`). The game tells you in-app
 when a new version is out.
 
 ## Licences

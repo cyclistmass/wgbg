@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Working German Board Game</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --wood: #3b2a1c; --wood-2: #4a3524; --brass: #c9a24a; --brass-2: #e6c66e; --ink: #f3e7cf; --muted: #c8b48f;
+  --sea: #2c6f8f; --panel: #2e2117; --line: #6b4f2e; --good: #8fc46a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--wood); color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button { font: inherit; color: #2b2118; background: linear-gradient(#f1d58a, var(--brass)); border: 1px solid #8a6a2a;
+  border-radius: 8px; padding: 8px 12px; margin: 3px 4px 3px 0; cursor: pointer; min-height: 40px; }
+button:hover { background: linear-gradient(#f7e2a6, var(--brass-2)); }
+button.on { outline: 3px solid #fff3; background: linear-gradient(#fff0c0, #e9c25a); }
+button:disabled { opacity: .45; cursor: default; }
+h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 14px 0 6px; }
+.panel { background: var(--panel); border: 2px solid var(--brass); border-radius: 12px; padding: 12px; }
+#start { max-width: 420px; margin: 8vh auto; text-align: center; padding: 22px 16px; }
+#start .row { margin: 12px 0; }
+#start .row button { min-width: 64px; }
+#game { display: none; height: 100%; }
+#game.show { display: flex; }
+#boardWrap { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: var(--sea); }
+#board { width: 100%; height: 100%; max-height: 100vh; touch-action: manipulation; }
+#side { width: 360px; max-width: 100%; overflow-y: auto; padding: 12px; border-left: 3px solid var(--brass); background: var(--wood-2); }
+#status { font-size: 17px; font-weight: 600; min-height: 26px; }
+.hand { margin-top: 8px; }
+.players { display: grid; gap: 4px; }
+.player { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; background: #0002; }
+.player.acting { outline: 2px solid var(--brass-2); }
+.dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #0008; flex: none; }
+.player .vp { margin-left: auto; font-weight: 700; }
+.small { font-size: 12px; color: var(--muted); }
+.hand { display: flex; gap: 6px; flex-wrap: wrap; }
+.card { min-width: 58px; text-align: center; padding: 6px 4px; border-radius: 8px; color: #1b140d; font-weight: 600; border: 1px solid #0006; }
+.card b { display: block; font-size: 18px; }
+#log { font-size: 13px; color: var(--muted); max-height: 180px; overflow-y: auto; }
+#log div { padding: 1px 0; }
+#over { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #000a; }
+#over.show { display: flex; }
+#over .panel { text-align: center; max-width: 360px; padding: 24px; }
+.hex-target { fill: #fff3; stroke: #fff; stroke-width: .08; cursor: pointer; }
+.spot { fill: #fff; stroke: #2b2118; stroke-width: .05; cursor: pointer; animation: pulse 1.1s ease-in-out infinite; }
+.path { stroke: #fff; stroke-width: .22; stroke-linecap: round; cursor: pointer; opacity: .75; animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+input { font: inherit; color: var(--ink); background: #0004; border: 1px solid var(--brass); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; max-width: 280px; }
+#online { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
+#lobby { display: none; max-width: 480px; margin: 6vh auto; padding: 22px 16px; }
+#lobby.show { display: block; }
+#roomCode { font-size: 30px; font-weight: 800; letter-spacing: 2px; color: var(--brass-2); margin: 6px 0; }
+.seat { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: #0002; margin: 4px 0; flex-wrap: wrap; }
+.seat .who { flex: 1; min-width: 140px; }
+.seat button { min-height: 32px; padding: 4px 8px; font-size: 13px; }
+.msg { color: #ffb4a8; min-height: 18px; }
+#boardWrap { position: relative; }
+#boardReport { position: absolute; top: 8px; right: 8px; min-height: 34px; padding: 5px 10px; font-size: 13px; z-index: 2; }
+#report { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #000a; z-index: 5; padding: 12px; }
+#report.show { display: flex; }
+#report .panel { width: 520px; max-width: 100%; max-height: 100%; overflow-y: auto; }
+#reportNote { width: 100%; height: 110px; resize: vertical; font: 15px/1.35 system-ui, sans-serif; color: #2b2118; background: #f3e7cf;
+  border: 2px solid var(--brass); border-radius: 8px; padding: 8px 10px; }
+#reportShots { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#reportShots .shot { position: relative; }
+#reportShots img { height: 64px; border: 1px solid var(--brass); border-radius: 4px; display: block; }
+#reportShots .shot button { position: absolute; top: -8px; right: -8px; min-height: 0; padding: 0 6px; margin: 0; border-radius: 10px;
+  background: #c0392b; color: #fff; border: 0; font-weight: 700; }
+#reportStatus { color: #d9b865; min-height: 18px; font-size: 13px; }
+/* A landscape window gets the start menu side by side: a game against the bots on the left, Play online on the right. */
+@media (min-width: 761px) and (orientation: landscape) {
+  #start { max-width: 880px; margin: 5vh auto; }
+  #menu:not([hidden]) { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start; }
+  #online { border-top: 0; margin-top: 0; padding-top: 0; padding-left: 28px; border-left: 1px solid var(--line); }
+}
+@media (max-width: 760px) {
+  #game.show { flex-direction: column; height: auto; }
+  /* The board stays in view while you scroll to the buttons. */
+  #boardWrap { height: 48vh; flex: none; position: sticky; top: 0; z-index: 1; }
+  #side { width: 100%; border-left: 0; border-top: 3px solid var(--brass); }
+}
+</style>
+</head>
+<body>
+<div id="start" class="panel">
+  <h1>Working German Board Game</h1>
+  <p class="small">Against the bots, or online with friends, in your browser.</p>
+  <div id="loading">Loading the game…</div>
+  <div id="menu" hidden>
+    <div id="local">
+    <h2>Players</h2>
+    <div class="row" id="pickPlayers"></div>
+    <h2>Bots</h2>
+    <div class="row" id="pickLevel"></div>
+    <h2>Bot speed</h2>
+    <div class="row" id="pickSpeed"></div>
+    <div class="row"><button id="startBtn">Start a game</button></div>
+    <div class="row"><button id="continueBtn" hidden>Continue your game</button></div>
+    <div class="row"><button id="reportStartBtn">Report a bug or idea</button></div>
+    </div>
+    <div id="online">
+      <h2>Play online</h2>
+      <div class="row"><input id="nameIn" placeholder="Your name" maxlength="24" autocomplete="nickname" aria-label="Your name"></div>
+      <div class="row"><button id="hostBtn">Host a room</button></div>
+      <div id="hostPanel" hidden>
+        <h2>Seats</h2>
+        <div class="row" id="pickSeats"></div>
+        <div id="hostSeats"></div>
+        <div class="row"><button id="createBtn">Create the room</button></div>
+      </div>
+      <div class="row"><input id="codeIn" placeholder="Room code, like VALE-289" maxlength="40" autocomplete="off" aria-label="Room code"></div>
+      <div class="row"><button id="joinBtn">Join a room</button></div>
+      <div id="netMsg" class="msg" role="status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="lobby" class="panel">
+  <h1>Room</h1>
+  <div id="roomCode"></div>
+  <div class="small">Friends join with this code, or the link:</div>
+  <div class="row"><input id="shareLink" readonly aria-label="Share link"> <button id="copyBtn">Copy link</button></div>
+  <h2>Seats</h2>
+  <div id="lobbySeats"></div>
+  <div id="lobbyWaiting" class="small"></div>
+  <div class="row">
+    <button id="readyBtn" hidden>I'm ready</button>
+    <button id="startOnlineBtn" hidden>Start the game</button>
+    <button id="leaveBtn">Leave the room</button>
+  </div>
+  <div id="lobbyMsg" class="msg" role="status"></div>
+</div>
+
+<div id="game">
+  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Game board"></svg>
+    <button id="boardReport" hidden>Report a bug or idea</button></div>
+  <div id="side">
+    <div id="status"></div>
+    <div id="dice" class="small"></div>
+    <div class="hand" id="hand" aria-label="Your cards"></div>
+    <div id="fortunes" class="small"></div>
+    <div id="actions"></div>
+    <h2>Players</h2>
+    <div class="players" id="players"></div>
+    <h2>Log</h2>
+    <div id="log"></div>
+    <h2>Costs</h2>
+    <div class="small">Road: Timber + Clay · Homestead: Timber + Clay + Fleece + Grain · Town: 2 Grain + 3 Stone · Fortune card: Fleece + Grain + Stone</div>
+    <h2>Settings</h2>
+    <div class="row"><button id="reportSetting" aria-pressed="false">Report button on the board</button></div>
+    <div class="row" style="margin-top:12px"><button id="quitBtn">New game</button> <button id="reportBtn">Report a bug or idea</button></div>
+  </div>
+</div>
+
+<div id="over"><div class="panel"><h1 id="overTitle"></h1><p id="overText"></p><button id="againBtn">Play again</button></div></div>
+
+<div id="report" role="dialog" aria-modal="true" aria-labelledby="reportTitle"><div class="panel">
+  <h1 id="reportTitle">Report a bug or an idea</h1>
+  <div class="row" id="reportKinds"></div>
+  <textarea id="reportNote" maxlength="4000" aria-label="Your report"></textarea>
+  <div class="row" id="reportShots"></div>
+  <div class="row"><button id="reportSend">Send</button> <button id="reportCopy">Copy</button> <button id="reportClose">Close</button></div>
+  <div id="reportStatus" role="status"></div>
+  <input type="file" id="reportFile" accept="image/*" hidden>
+</div></div>
+
+<script>
+"use strict";
+const RES = ["Timber", "Clay", "Fleece", "Grain", "Stone"];
+const RES_COLOR = ["#3f7d3a", "#c0623f", "#9ccf66", "#e9c74f", "#9a9aa2"];
+const DESERT_COLOR = "#dcc89a";
+const FORTUNES = ["Sentinel", "Windfall", "Corner the Market", "Trailblazers", "Point card"];
+// The app's seat colours (SeatColours.kt), by name: each player's comes with the state (a room's are the host's).
+const COLOUR = { RED: "#ff5c59", BLUE: "#3fb4ee", ORANGE: "#ff9b3e", WHITE: "#f5f5f5", YELLOW: "#e0a800", PURPLE: "#6a3fb5", BLACK: "#2b2b30" };
+const seatColour = p => COLOUR[(st.players[p] || {}).colour] || "#888";
+const SAVE = "wgbg-web-save";
+const S3 = Math.sqrt(3) / 2;
+
+let board = null, st = null, logFrom = 0, mode = null, robberHex = -1, busy = false, players = 4, level = "Greedy", speed = "Normal";
+const SPEEDS = { Slow: 900, Normal: 400, Fast: 40 };
+const $ = id => document.getElementById(id);
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(SAVE)); } catch (e) { return null; } },
+  set(v) { try { localStorage.setItem(SAVE, JSON.stringify(v)); } catch (e) {} },
+  clear() { try { localStorage.removeItem(SAVE); } catch (e) {} },
+};
+
+function el(tag, attrs, parent) {
+  const svg = ["svg", "g", "polygon", "circle", "line", "text", "rect", "path"].includes(tag);
+  const e = svg ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "text") e.textContent = v; else if (k === "onclick") e.addEventListener("click", v); else e.setAttribute(k, v);
+  }
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const pos = v => [board.vertices[v][0] * S3, board.vertices[v][1] * 0.5];
+
+// ---------------------------------------------------------------- start screen
+function choice(id, values, get, set, label) {
+  const box = $(id); box.innerHTML = "";
+  for (const v of values) el("button", { text: label ? label(v) : v, class: v === get() ? "on" : "", onclick: () => { set(v); choice(id, values, get, set, label); } }, box);
+}
+function showMenu() {
+  $("game").classList.remove("show"); $("over").classList.remove("show"); $("lobby").classList.remove("show"); $("start").style.display = "";
+  $("loading").hidden = true; $("menu").hidden = false;
+  choice("pickPlayers", [3, 4, 5, 6], () => players, v => players = v);
+  choice("pickLevel", ["Easy", "Greedy", "Strong", "Master"], () => level, v => level = v);
+  choice("pickSpeed", Object.keys(SPEEDS), () => speed, v => { speed = v; try { localStorage.setItem("wgbg-web-speed", v); } catch (e) {} });
+  $("continueBtn").hidden = !store.get();
+}
+$("startBtn").onclick = () => { online = false; wgbg.newGame(players, level); enterGame(); };
+$("continueBtn").onclick = () => {
+  const s = store.get();
+  online = false;
+  if (s && wgbg.restore(s.players, s.level, s.seed, s.moves.join(","))) enterGame();
+  else { store.clear(); showMenu(); }
+};
+$("quitBtn").onclick = () => {
+  if (online) { if (confirm("Leave this room? A bot plays your seat for the others.")) leaveRoom(); return; }
+  if (confirm("Leave this game and start a new one?")) { store.clear(); showMenu(); }
+};
+$("againBtn").onclick = () => {
+  if (online) { forgetRoom(); wgbgNet.drop(); online = false; history.replaceState(null, "", location.pathname + location.search); }
+  else store.clear();
+  showMenu();
+};
+
+function enterGame() {
+  board = JSON.parse(game().board());
+  logFrom = 0; lastEpoch = -1; mode = null; robberHex = -1; $("log").innerHTML = "";
+  $("start").style.display = "none"; $("lobby").classList.remove("show"); $("game").classList.add("show");
+  $("quitBtn").textContent = online ? "Leave the room" : "New game";
+  $("againBtn").textContent = online ? "Back to the start" : "Play again";
+  refresh();
+}
+// The game being played: against the bots here (wgbg), or an online room (wgbgNet); both draw the same way.
+const game = () => online ? wgbgNet : wgbg;
+
+// ---------------------------------------------------------------- game loop
+function refresh() {
+  st = JSON.parse(game().state(logFrom));
+  if (!st) return;
+  if (online && st.logEpoch !== lastEpoch) {
+    // The room's history changed under us (a move refused): the log starts again.
+    lastEpoch = st.logEpoch; logFrom = 0; $("log").innerHTML = "";
+    st = JSON.parse(wgbgNet.state(0));
+  }
+  for (const line of st.log) {
+    const [seat, text] = line.split("\t");
+    const d = el("div", {}, $("log"));
+    el("span", { class: "dot", style: `display:inline-block;width:10px;height:10px;margin-right:6px;background:${seatColour(seat)}` }, d);
+    d.appendChild(document.createTextNode(`${st.players[seat].name} ${text}`));
+  }
+  logFrom = st.logSize;
+  $("log").scrollTop = $("log").scrollHeight;
+  if (online) { render(); botTurn(); return; }
+  const rec = JSON.parse(wgbg.record());
+  if (st.over) store.clear(); else store.set(rec);
+  render();
+  if (!st.over && st.acting !== st.me && !busy) {
+    busy = true;
+    // Strong and Master think for a while themselves; the wait is only for following the others.
+    const thinks = st.players[st.acting].bot === "Master" || st.players[st.acting].bot === "Strong";
+    setTimeout(() => { wgbg.bot(); busy = false; refresh(); }, thinks ? Math.min(60, SPEEDS[speed]) : SPEEDS[speed]);
+  }
+}
+function play(code) { mode = null; robberHex = -1; if (game().play(code)) { movedAt = performance.now(); refresh(); } }
+// Each click redraws the page, so the second click of a double click, or a quick second tap, lands on what the first
+// one drew under it: the roads from a homestead you just placed, End turn where Roll was, the board after Start a
+// game. Only the first click counts, and nothing is taken for a moment after one of your moves.
+let movedAt = -1e9;
+addEventListener("click", e => {
+  if (e.target.closest && e.target.closest("input, textarea, select")) return;
+  if (e.detail > 1 || performance.now() - movedAt < 300) { e.stopPropagation(); e.preventDefault(); }
+}, true);
+const legalOf = type => st.legal.filter(a => a.type === type);
+
+// ---------------------------------------------------------------- drawing
+function render() {
+  drawBoard(); drawSide();
+  if (st.over) {
+    $("overTitle").textContent = st.winner === st.me ? "You won!" : st.winner >= 0 ? `${st.players[st.winner].name} won` : "Game over";
+    $("overText").textContent = st.players.map(p => `${p.name}: ${p.vp}`).join(" · ");
+    $("over").classList.add("show");
+  }
+}
+
+function drawBoard() {
+  const svg = $("board"); svg.innerHTML = "";
+  const xs = board.vertices.map(p => p[0] * S3), ys = board.vertices.map(p => p[1] * 0.5);
+  const pad = 1.6, minX = Math.min(...xs) - pad, minY = Math.min(...ys) - pad;
+  svg.setAttribute("viewBox", `${minX} ${minY} ${Math.max(...xs) + pad - minX} ${Math.max(...ys) + pad - minY}`);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+  // Harbours: a token out at sea beside its two corners.
+  for (const p of board.ports) {
+    const [a, b] = p.v.map(pos), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    const len = Math.hypot(mx - cx, my - cy) || 1, tx = mx + (mx - cx) / len * 0.75, ty = my + (my - cy) / len * 0.75;
+    for (const q of [a, b]) el("line", { x1: q[0], y1: q[1], x2: tx, y2: ty, stroke: "#e9cfa0", "stroke-width": .07 }, svg);
+    el("circle", { cx: tx, cy: ty, r: .42, fill: p.type < 0 ? "#e9cfa0" : RES_COLOR[p.type], stroke: "#2b2118", "stroke-width": .04 }, svg);
+    el("text", { x: tx, y: ty + .12, "text-anchor": "middle", "font-size": .32, "font-weight": 700, fill: "#2b2118", text: p.type < 0 ? "3:1" : "2:1" }, svg);
+  }
+
+  board.hexes.forEach((h, i) => {
+    const pts = h.v.map(pos), hx = pts.reduce((s, p) => s + p[0], 0) / 6, hy = pts.reduce((s, p) => s + p[1], 0) / 6;
+    el("polygon", { points: pts.map(p => p.join(",")).join(" "), fill: h.res < 0 ? DESERT_COLOR : RES_COLOR[h.res], stroke: "#e9dcbc", "stroke-width": .06 }, svg);
+    el("text", { x: hx, y: hy - .48, "text-anchor": "middle", "font-size": .22, fill: "#1b140d", opacity: .7, text: h.res < 0 ? "Desert" : RES[h.res] }, svg);
+    if (h.num) {
+      el("circle", { cx: hx, cy: hy, r: .36, fill: "#f4e4bf", stroke: "#2b2118", "stroke-width": .03 }, svg);
+      el("text", { x: hx, y: hy + .1, "text-anchor": "middle", "font-size": .34, "font-weight": 700, fill: h.num === 6 || h.num === 8 ? "#b3261e" : "#2b2118", text: h.num }, svg);
+    }
+    if (st.robber === i) {
+      el("circle", { cx: hx + .02, cy: hy + .02, r: .3, fill: "#1b1b1b", opacity: .85 }, svg);
+      el("text", { x: hx, y: hy + .1, "text-anchor": "middle", "font-size": .26, fill: "#fff", text: "B" }, svg);
+    }
+    h.cx = hx; h.cy = hy;
+  });
+
+  board.edges.forEach((e, i) => {
+    if (st.road[i] < 0) return;
+    const [a, b] = e.map(pos);
+    el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "#1b140d", "stroke-width": .24, "stroke-linecap": "round" }, svg);
+    el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: seatColour(st.road[i]), "stroke-width": .16, "stroke-linecap": "round" }, svg);
+  });
+
+  st.owner.forEach((o, v) => {
+    if (o < 0) return;
+    const [x, y] = pos(v), town = st.building[v] === 2, s = town ? .3 : .21;
+    const house = town
+      ? `M${x - s},${y + s * .8} L${x - s},${y - s * .2} L${x},${y - s * .9} L${x + s},${y - s * .2} L${x + s},${y + s * .8} Z`
+      : `M${x - s},${y + s * .7} L${x - s},${y - s * .1} L${x},${y - s * .8} L${x + s},${y - s * .1} L${x + s},${y + s * .7} Z`;
+    el("path", { d: house, fill: seatColour(o), stroke: "#1b140d", "stroke-width": .05 }, svg);
+  });
+
+  // What you can tap now.
+  if (st.acting !== st.me || st.over) return;
+  const show = t => st.phase === "BUILD_INITIAL_SETTLEMENT" || st.phase === "BUILD_INITIAL_ROAD" || mode === t;
+  if (show("BUILD_ROAD")) for (const a of legalOf("BUILD_ROAD")) {
+    const [p, q] = board.edges[+a.payload].map(pos);
+    el("line", { class: "path", x1: p[0], y1: p[1], x2: q[0], y2: q[1], onclick: () => play(a.code) }, svg);
+  }
+  for (const t of ["BUILD_SETTLEMENT", "BUILD_CITY"]) if (show(t)) for (const a of legalOf(t)) {
+    const [x, y] = pos(+a.payload);
+    el("circle", { class: "spot", cx: x, cy: y, r: .2, onclick: () => play(a.code) }, svg);
+  }
+  if (st.phase === "MOVE_ROBBER" && robberHex < 0) {
+    const hexes = [...new Set(legalOf("MOVE_ROBBER").map(a => a.a))];
+    for (const i of hexes) {
+      const h = board.hexes[i];
+      el("polygon", { class: "hex-target", points: h.v.map(pos).map(p => p.join(",")).join(" "), onclick: () => {
+        const opts = legalOf("MOVE_ROBBER").filter(a => a.a === i);
+        if (opts.length === 1) play(opts[0].code); else { robberHex = i; render(); }
+      } }, svg);
+    }
+  }
+}
+
+function statusText() {
+  if (st.over) return "Game over";
+  const who = st.players[st.acting];
+  if (st.acting !== st.me) {
+    const waiting = who.bot ? `${who.name} (${who.bot}) is playing…` : `Waiting for ${who.name}…`;
+    return st.phase === "DECIDE_TRADE" && st.current === st.me ? `Others are answering your offer. ${waiting}` : waiting;
+  }
+  switch (st.phase) {
+    case "BUILD_INITIAL_SETTLEMENT": return "Place a homestead: tap a white spot";
+    case "BUILD_INITIAL_ROAD": return "Place a road next to it";
+    case "DISCARD": return `A 7: discard ${st.discardOwed} card${st.discardOwed === 1 ? "" : "s"}`;
+    case "MOVE_ROBBER": return robberHex < 0 ? "Move the Bandit: tap a tile" : "Who do you rob?";
+    case "DECIDE_TRADE": {
+      const give = st.offer.slice(0, 5), want = st.offer.slice(5, 10), list = c => c.map((n, r) => n ? `${n} ${RES[r]}` : "").filter(Boolean).join(" + ") || "nothing";
+      return `${st.players[st.current].name} offers ${list(give)} for your ${list(want)}`;
+    }
+    case "EXTRA_BUILD": return "Extra build: build or pass";
+    case "PLAY_TURN": return st.rolled ? "Your turn: build, trade or end it" : "Your turn: roll the dice";
+    default: return st.phase;
+  }
+}
+
+function drawSide() {
+  $("status").textContent = statusText();
+  $("dice").textContent = (st.roll ? `Last roll: ${st.roll} · Turn ${st.turn + 1} · ${st.vpToWin} points to win` : `${st.vpToWin} points to win`) + onlineNote();
+  const pl = $("players"); pl.innerHTML = "";
+  st.players.forEach((p, i) => {
+    const row = el("div", { class: "player" + (i === st.acting && !st.over ? " acting" : "") }, pl);
+    el("span", { class: "dot", style: `background:${seatColour(i)}` }, row);
+    const name = el("div", {}, row);
+    name.appendChild(document.createTextNode(p.name + (p.bot ? ` · ${p.bot}` : "")));
+    const extra = [`${p.cards} card${p.cards === 1 ? "" : "s"}`, `${p.dev} Fortune`, `${p.knights} Sentinels`];
+    if (st.longest === i) extra.push("Longest road");
+    if (st.largest === i) extra.push("Strongest Watch");
+    el("div", { class: "small", text: extra.join(" · ") }, name);
+    el("span", { class: "vp", text: p.vp }, row);
+  });
+
+  const me = st.players[st.me] || { hand: [], devHand: [], devNew: [] }, hand = $("hand"); hand.innerHTML = "";
+  me.hand.forEach((n, r) => { const c = el("div", { class: "card", style: `background:${RES_COLOR[r]}` }, hand); el("b", { text: n }, c); c.appendChild(document.createTextNode(RES[r])); });
+  const f = me.devHand.map((n, i) => n ? `${n} ${FORTUNES[i]}${me.devNew[i] ? ` (${me.devNew[i]} new)` : ""}` : "").filter(Boolean);
+  $("fortunes").textContent = f.length ? "Fortune cards: " + f.join(", ") : "";
+
+  const box = $("actions"); box.innerHTML = "";
+  // Your moves: on your turn, and Withdraw while the others answer your offer (online).
+  if (!st.legal.length || st.over) return;
+  const group = (title, acts, label) => {
+    if (!acts.length) return;
+    el("h2", { text: title }, box);
+    for (const a of acts) el("button", { text: label ? label(a) : a.text, onclick: () => play(a.code) }, box);
+  };
+  const used = new Set();
+  const take = types => { const r = st.legal.filter(a => types.includes(a.type)); r.forEach(a => used.add(a.code)); return r; };
+  take(["BUILD_INITIAL_SETTLEMENT"]);
+  if (st.phase === "MOVE_ROBBER") {
+    const r = take(["MOVE_ROBBER"]);
+    if (robberHex >= 0) group("Rob", r.filter(a => a.a === robberHex));
+  }
+  group("Turn", take(["ROLL", "END_TURN"]), a => a.type === "END_TURN" && st.phase === "EXTRA_BUILD" ? "Pass" : a.text);
+  // Build: toggles that show the spots on the board.
+  if (st.phase !== "BUILD_INITIAL_SETTLEMENT" && st.phase !== "BUILD_INITIAL_ROAD") {
+    const builds = [["BUILD_ROAD", "Road"], ["BUILD_SETTLEMENT", "Homestead"], ["BUILD_CITY", "Town"]].filter(([t]) => legalOf(t).length);
+    if (builds.length) {
+      el("h2", { text: "Build (then tap the board)" }, box);
+      for (const [t, name] of builds) el("button", { text: name, class: mode === t ? "on" : "", onclick: () => { mode = mode === t ? null : t; render(); } }, box);
+    }
+  }
+  take(["BUILD_ROAD", "BUILD_SETTLEMENT", "BUILD_CITY"]);
+  group("Fortune", take(["BUY_DEVELOPMENT_CARD", "PLAY_KNIGHT_CARD", "PLAY_ROAD_BUILDING", "PLAY_MONOPOLY", "PLAY_YEAR_OF_PLENTY"]));
+  group("Discard", take(["DISCARD"]));
+  group("Offer", take(["ACCEPT_TRADE", "REJECT_TRADE", "COUNTER_TRADE", "CONFIRM_TRADE", "CANCEL_TRADE"]));
+  group("Trade with the bank", take(["MARITIME_TRADE"]));
+  group("Other", st.legal.filter(a => !used.has(a.code)));
+}
+
+// ---------------------------------------------------------------- online (#233)
+// The room's code is kept in this browser, so a reload or a second tab goes back into it (its dice secret is kept too).
+const ROOM = "wgbg-web-room", NAME = "wgbg-web-name";
+const SEAT_KINDS = [["friend", "Friend"], ["EASY", "Easy"], ["GREEDY", "Greedy"], ["STRONG", "Strong"], ["MASTER", "Master"], ["empty", "Empty"]];
+let online = false, lastEpoch = -1, botTimer = null, botKey = null, seatCount = 4, hostSeats = ["friend", "GREEDY", "GREEDY", "GREEDY", "GREEDY"];
+const keep = {
+  get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+  del: k => { try { localStorage.removeItem(k); } catch (e) {} },
+};
+const rememberRoom = code => keep.set(ROOM, code), forgetRoom = () => keep.del(ROOM);
+
+// Kotlin answers each call through wgbgNetDone; every change to the room arrives through wgbgNetChanged.
+const calls = new Map(); let callId = 0;
+globalThis.wgbgNetDone = (id, value, error) => { const c = calls.get(id); calls.delete(id); if (c) error ? c.reject(new Error(error)) : c.resolve(value); };
+const net = (fn, ...args) => new Promise((resolve, reject) => { const id = ++callId; calls.set(id, { resolve, reject }); wgbgNet[fn](id, ...args); });
+let changeQueued = false;
+globalThis.wgbgNetChanged = () => { if (!changeQueued) { changeQueued = true; setTimeout(() => { changeQueued = false; onlineChanged(); }, 0); } };
+
+// TODO(#233): the share link is this page's own address; a site for the web game (and the app's JOIN_BASE) may differ.
+const shareLink = code => location.origin + location.pathname + location.search + "#" + code;
+function say(id, text) { $(id).textContent = text || ""; }
+function myName() { const n = $("nameIn").value.trim(); if (n) keep.set(NAME, n); return n; }
+
+function drawHostSeats() {
+  choice("pickSeats", [4, 5, 6], () => seatCount, v => { seatCount = v; drawHostSeats(); });
+  const box = $("hostSeats"); box.innerHTML = "";
+  for (let i = 1; i < seatCount; i++) {
+    const row = el("div", { class: "seat" }, box);
+    el("div", { class: "who", text: `Seat ${i + 1}` }, row);
+    for (const [spec, label] of SEAT_KINDS) el("button", { text: label, class: hostSeats[i - 1] === spec ? "on" : "", onclick: () => { hostSeats[i - 1] = spec; drawHostSeats(); } }, row);
+  }
+}
+$("hostBtn").onclick = () => { $("hostPanel").hidden = !$("hostPanel").hidden; drawHostSeats(); };
+$("createBtn").onclick = async () => {
+  const name = myName();
+  if (!name) { say("netMsg", "Type your name first"); $("nameIn").focus(); return; }
+  say("netMsg", "Opening a room…");
+  try { enterRoom(await net("host", name, hostSeats.slice(0, seatCount - 1).join(","))); }
+  catch (e) { say("netMsg", e.message); }
+};
+async function joinRoom(typed) {
+  const name = myName();
+  if (!name) { say("netMsg", "Type your name, then Join"); $("nameIn").focus(); return; }
+  const code = wgbgNet.normalize(typed);
+  if (!code) { say("netMsg", "That isn't a room code"); return; }
+  say("netMsg", `Joining ${code}…`);
+  try { enterRoom(await net("join", code, name)); } catch (e) { say("netMsg", e.message); }
+}
+$("joinBtn").onclick = () => joinRoom($("codeIn").value);
+$("codeIn").addEventListener("keydown", e => { if (e.key === "Enter") joinRoom($("codeIn").value); });
+async function resumeRoom(code) {
+  say("netMsg", `Back to room ${code}…`);
+  try { enterRoom(await net("rejoin", code)); }
+  catch (e) { forgetRoom(); online = false; say("netMsg", `Room ${code}: ${e.message}`); }
+}
+function enterRoom(code) {
+  rememberRoom(code); online = true; say("netMsg", "");
+  if (location.hash.slice(1) !== code) history.replaceState(null, "", "#" + code);
+  onlineChanged();
+}
+async function leaveRoom() {
+  clearTimeout(botTimer); botTimer = null; botKey = null;
+  try { await net("leave"); } catch (e) {}
+  forgetRoom(); online = false; history.replaceState(null, "", location.pathname + location.search); showMenu();
+}
+
+function onlineChanged() {
+  if (!online) return;
+  const lb = JSON.parse(wgbgNet.lobby());
+  if (!lb) return;
+  if (lb.loading || lb.status === "lobby") { showLobby(lb); return; }
+  if (!$("game").classList.contains("show")) enterGame(); else refresh();
+}
+
+function showLobby(lb) {
+  $("start").style.display = "none"; $("game").classList.remove("show"); $("over").classList.remove("show"); $("lobby").classList.add("show");
+  $("roomCode").textContent = lb.code; $("shareLink").value = shareLink(lb.code);
+  say("lobbyMsg", lb.loading ? (lb.error || "Opening the room…") : lb.error);
+  const box = $("lobbySeats"); box.innerHTML = "";
+  for (const [i, s] of (lb.seats || []).entries()) {
+    const spec = s.person ? "" : s.open ? (s.bot ? "friend" : "empty") : s.bot.toUpperCase();
+    const row = el("div", { class: "seat" }, box);
+    el("span", { class: "dot", style: `background:${COLOUR[s.colour] || "#888"}` }, row);
+    const who = s.person ? `${s.name}${s.me ? " (you)" : ""} · ${s.ready ? "ready" : "not ready"}`
+      : spec === "friend" ? "Waiting for a friend (a Greedy bot plays if nobody comes)" : spec === "empty" ? "Empty" : `${s.bot} bot`;
+    el("div", { class: "who", text: who }, row);
+    if (lb.host && i > 0 && !s.person) for (const [k, label] of SEAT_KINDS)
+      el("button", { text: label, class: spec === k ? "on" : "", onclick: () => net("seat", i, k).catch(e => say("lobbyMsg", e.message)) }, row);
+  }
+  $("lobbyWaiting").textContent = (lb.waiting || []).join(" · ");
+  const me = (lb.seats || [])[lb.seat];
+  $("readyBtn").hidden = !!lb.host || !me;
+  if (me) $("readyBtn").textContent = me.ready ? "Not ready" : "I'm ready";
+  $("startOnlineBtn").hidden = !lb.host; $("startOnlineBtn").disabled = !lb.canStart;
+}
+$("readyBtn").onclick = () => { const lb = JSON.parse(wgbgNet.lobby()); net("ready", !lb.seats[lb.seat].ready).catch(e => say("lobbyMsg", e.message)); };
+$("startOnlineBtn").onclick = () => net("start").catch(e => say("lobbyMsg", e.message));
+$("leaveBtn").onclick = () => leaveRoom();
+$("copyBtn").onclick = async () => { try { await navigator.clipboard.writeText($("shareLink").value); say("lobbyMsg", "Link copied"); } catch (e) { $("shareLink").select(); } };
+
+// The room's bots: this browser moves for one when it is first in line (the next takes over after 8 s more of quiet).
+function botTurn() {
+  const line = wgbgNet.botLine(), at = wgbgNet.moves(), key = `${at}:${line}`;
+  if (line < 0) { clearTimeout(botTimer); botTimer = null; botKey = null; return; }
+  if (key === botKey) return;
+  clearTimeout(botTimer); botKey = key;
+  const p = st.players[st.acting], thinks = p.bot === "Master" || p.bot === "Strong";
+  botTimer = setTimeout(() => {
+    botTimer = null; botKey = null;
+    if (online && wgbgNet.moves() === at && wgbgNet.botLine() >= 0) wgbgNet.botMove();
+    if (online) refresh();
+  }, (thinks ? Math.min(60, SPEEDS[speed]) : SPEEDS[speed]) + line * 8000);
+}
+function onlineNote() {
+  if (!online || !st.online) return "";
+  const o = st.online;
+  return ` · Room ${o.code}` + (o.error ? ` · ${o.error}` : o.reconnecting ? " · Reconnecting…" : o.pending ? " · Sending…" : "");
+}
+
+// ---------------------------------------------------------------- report a bug or idea (#255)
+// As in the app: from the start screen, from the game (its side panel, or the button on the board that Settings turns on),
+// a Bug or an Idea with your note, the game (it replays move by move) and a picture of the board as it was when you
+// opened the report; it goes to the same Firestore collections as the app's reports, which read it unchanged.
+const REPORT_BUTTON = "wgbg-web-report-button";
+let reportKind = "BUG", reportWithGame = false, reportInRoom = false, reportHasGame = false, reportSending = false;
+let reportShots = []; // base64 JPEGs
+const reportLimits = () => JSON.parse(wgbgReport.limits());
+
+/** The browser and its version, and the system, from what the browser says of itself. */
+function browserInfo() {
+  const ua = navigator.userAgent;
+  const pick = [[/Edg\/([\d.]+)/, "Edge"], [/OPR\/([\d.]+)/, "Opera"], [/(?:Firefox|FxiOS)\/([\d.]+)/, "Firefox"],
+    [/(?:CriOS|HeadlessChrome|Chrome)\/([\d.]+)/, "Chrome"], [/Version\/([\d.]+).*Safari/, "Safari"]].find(([re]) => re.test(ua));
+  const browser = pick ? `${pick[1]} ${ua.match(pick[0])[1]}` : "unknown browser";
+  const os = /Android ([\d.]+)/.test(ua) ? `Android ${ua.match(/Android ([\d.]+)/)[1]}` : /iPhone|iPad|iPod/.test(ua) ? "iOS"
+    : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "macOS" : /CrOS/.test(ua) ? "ChromeOS" : /Linux/.test(ua) ? "Linux" : "unknown system";
+  return { browser, os };
+}
+
+/** [canvas] as a base64 JPEG within the rules' size, the app's way: better quality first, then smaller. */
+function jpegOf(canvas) {
+  const max = reportLimits().shotChars;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    for (const q of [0.8, 0.65, 0.5, 0.35]) {
+      const b64 = canvas.toDataURL("image/jpeg", q).split(",")[1] || "";
+      if (b64 && b64.length <= max) return b64;
+    }
+    const smaller = document.createElement("canvas");
+    smaller.width = Math.max(1, Math.floor(canvas.width * 3 / 4)); smaller.height = Math.max(1, Math.floor(canvas.height * 3 / 4));
+    smaller.getContext("2d").drawImage(canvas, 0, 0, smaller.width, smaller.height);
+    canvas = smaller;
+  }
+  return null;
+}
+/** An image drawn on a canvas at most the shot's longest edge, on [background]. */
+function canvasOf(img, w, h, background) {
+  const k = Math.min(1, reportLimits().edge / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+  const g = c.getContext("2d");
+  if (background) { g.fillStyle = background; g.fillRect(0, 0, c.width, c.height); }
+  g.drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+/** The board as it is now, as a picture: the SVG with the page's styles, drawn on the sea. */
+async function boardShot() {
+  try {
+    const svg = $("board"), r = svg.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("width", r.width); clone.setAttribute("height", r.height);
+    const css = [...document.styleSheets].flatMap(sh => { try { return [...sh.cssRules].map(x => x.cssText); } catch (e) { return []; } });
+    const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    style.textContent = css.join("\n");
+    clone.insertBefore(style, clone.firstChild);
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+    await img.decode();
+    const dpr = window.devicePixelRatio || 1;
+    return jpegOf(canvasOf(img, r.width * dpr, r.height * dpr, getComputedStyle($("boardWrap")).backgroundColor || "#2c6f8f"));
+  } catch (e) { return null; }
+}
+
+function drawReport() {
+  const box = $("reportKinds"); box.innerHTML = "";
+  for (const [k, label] of [["BUG", "Bug"], ["IDEA", "Idea"]])
+    el("button", { text: label, class: reportKind === k ? "on" : "", "aria-pressed": String(reportKind === k), onclick: () => { reportKind = k; drawReport(); } }, box);
+  if (reportHasGame) el("button", { text: "Include this game", class: reportWithGame ? "on" : "", "aria-pressed": String(reportWithGame),
+    onclick: () => { reportWithGame = !reportWithGame; drawReport(); } }, box);
+  $("reportNote").placeholder = reportKind === "BUG" ? "What went wrong? What did you expect?" : "What would make it better?";
+  const shots = $("reportShots"); shots.innerHTML = "";
+  reportShots.forEach((b64, i) => {
+    const d = el("div", { class: "shot" }, shots);
+    el("img", { src: "data:image/jpeg;base64," + b64, alt: `Screenshot ${i + 1}` }, d);
+    el("button", { text: "✗", "aria-label": `Remove screenshot ${i + 1}`, onclick: () => { reportShots.splice(i, 1); drawReport(); } }, d);
+  });
+  if (reportShots.length < reportLimits().shots)
+    el("button", { text: reportShots.length ? "Add another" : "Add a picture", onclick: () => $("reportFile").click() }, shots);
+  $("reportSend").disabled = reportSending || !($("reportNote").value.trim() || reportWithGame);
+}
+async function openReport(fromGame) {
+  reportInRoom = fromGame && online;
+  reportHasGame = fromGame && wgbgReport.hasGame(reportInRoom);
+  reportKind = "BUG"; reportWithGame = reportHasGame; reportSending = false; reportShots = [];
+  $("reportNote").value = ""; say("reportStatus", "");
+  // The game as it was when the report opened (taken before the sheet covers it).
+  if (fromGame) { const shot = await boardShot(); if (shot) reportShots.push(shot); }
+  drawReport();
+  $("report").classList.add("show");
+  $("reportNote").focus();
+}
+function closeReport() { $("report").classList.remove("show"); reportShots = []; }
+function reportText() {
+  const { browser, os } = browserInfo();
+  return wgbgReport.text(reportInRoom, reportKind, $("reportNote").value, reportWithGame, wgbgReport.device(browser, os),
+    wgbgReport.screen(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1), new Date().toISOString());
+}
+$("reportNote").addEventListener("input", () => { $("reportSend").disabled = reportSending || !($("reportNote").value.trim() || reportWithGame); });
+$("reportSend").onclick = async () => {
+  reportSending = true; drawReport(); say("reportStatus", "Sending…");
+  const shots = reportShots.slice();
+  const text = reportText() + (shots.length ? `\nScreenshots: ${shots.length}` : "");
+  try {
+    const n = Number(await net2("send", text, JSON.stringify(shots)));
+    say("reportStatus", n < shots.length ? "Sent, thank you (the picture didn't go)" : "Sent, thank you");
+    $("reportNote").value = ""; reportShots = [];
+  } catch (e) { say("reportStatus", "Couldn't send (offline?); try Copy"); }
+  reportSending = false; drawReport();
+};
+$("reportCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText(reportText()); say("reportStatus", "Copied: paste it into a message to us"); }
+  catch (e) { say("reportStatus", "Couldn't copy here"); }
+};
+$("reportClose").onclick = closeReport;
+$("report").addEventListener("keydown", e => { if (e.key === "Escape") closeReport(); });
+$("reportFile").addEventListener("change", async () => {
+  const f = $("reportFile").files[0]; $("reportFile").value = "";
+  if (!f) return;
+  try {
+    const img = new Image(); img.src = URL.createObjectURL(f); await img.decode();
+    const b64 = jpegOf(canvasOf(img, img.naturalWidth, img.naturalHeight, "#fff"));
+    URL.revokeObjectURL(img.src);
+    if (b64 && reportShots.length < reportLimits().shots) reportShots.push(b64); else if (!b64) say("reportStatus", "That picture is too big");
+  } catch (e) { say("reportStatus", "Can't open that picture"); }
+  drawReport();
+});
+// wgbgReport.send answers through wgbgNetDone like wgbgNet's calls.
+const net2 = (fn, ...args) => new Promise((resolve, reject) => { const id = ++callId; calls.set(id, { resolve, reject }); wgbgReport[fn](id, ...args); });
+$("reportStartBtn").onclick = () => openReport(false);
+$("reportBtn").onclick = () => openReport(true);
+$("boardReport").onclick = () => openReport(true);
+// Settings: the Report button on the board (off by default, as in the app), remembered in this browser.
+function drawReportSetting() {
+  const on = keep.get(REPORT_BUTTON) === "on";
+  $("reportSetting").classList.toggle("on", on); $("reportSetting").setAttribute("aria-pressed", String(on));
+  $("boardReport").hidden = !on;
+}
+$("reportSetting").onclick = () => { keep.get(REPORT_BUTTON) === "on" ? keep.del(REPORT_BUTTON) : keep.set(REPORT_BUTTON, "on"); drawReportSetting(); };
+drawReportSetting();
+
+// ---------------------------------------------------------------- load
+window.addEventListener("error", e => { $("loading").textContent = "Error: " + e.message; document.title = "failed"; });
+try { speed = localStorage.getItem("wgbg-web-speed") || speed; } catch (e) {}
+window.addEventListener("wgbg-ready", () => {
+  document.title = "Working German Board Game"; showMenu();
+  $("nameIn").value = keep.get(NAME);
+  // A share link (…#VALE-289) joins that room; else the room this browser was in, if any, carries on.
+  const linked = location.hash.length > 1 ? wgbgNet.normalize(decodeURIComponent(location.hash.slice(1))) : "";
+  const saved = keep.get(ROOM);
+  if (saved && (!linked || linked === saved)) resumeRoom(saved);
+  else if (linked) { $("codeIn").value = linked; joinRoom(linked); }
+});
+(async () => {
+  globalThis.wgbgModels = {};
+  for (const n of ["value-base.onnx", "value-chivalry.onnx"]) {
+    try { const r = await fetch(n); if (r.ok) globalThis.wgbgModels[n] = new Uint8Array(await r.arrayBuffer()); } catch (e) {}
+  }
+  // Online play's Firebase (loaded on first use), then the game.
+  // firebase-live.js (git-ignored, absent in tests) holds the live web app config; firebase-config.js picks it up.
+  for (const src of ["firebase-live.js", "firebase-config.js", "fire.js", "web.js"]) {
+    const s = document.createElement("script");
+    s.src = src; s.async = false;
+    document.body.appendChild(s);
+  }
+})();
+</script>
+</body>
+</html>
