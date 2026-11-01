@@ -272,11 +272,12 @@ function refresh() {
 function play(code) { mode = null; robberHex = -1; if (game().play(code)) { movedAt = performance.now(); refresh(); } }
 // Each click redraws the page, so the second click of a double click, or a quick second tap, lands on what the first
 // one drew under it: the roads from a homestead you just placed, End turn where Roll was, the board after Start a
-// game. Only the first click counts, and nothing is taken for a moment after one of your moves.
+// game. Only the first click counts, and the table takes nothing for a moment after one of your moves (the screen
+// that says who won, and the menus, still take a click at once).
 let movedAt = -1e9;
 addEventListener("click", e => {
   if (e.target.closest && e.target.closest("input, textarea, select")) return;
-  if (e.detail > 1 || performance.now() - movedAt < 300) { e.stopPropagation(); e.preventDefault(); }
+  if (e.detail > 1 || (performance.now() - movedAt < 300 && $("game").contains(e.target))) { e.stopPropagation(); e.preventDefault(); }
 }, true);
 const legalOf = type => st.legal.filter(a => a.type === type);
 
