@@ -48,6 +48,12 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var
 .hex-target { fill: #fff3; stroke: #fff; stroke-width: .08; cursor: pointer; }
 .spot { fill: #fff; stroke: #2b2118; stroke-width: .05; cursor: pointer; animation: pulse 1.1s ease-in-out infinite; }
 .path { stroke: #fff; stroke-width: .22; stroke-linecap: round; cursor: pointer; opacity: .75; animation: pulse 1.1s ease-in-out infinite; }
+.ghost { cursor: pointer; }
+/* A build waits for Confirm, under the status line: right below the board on a phone, and never over a spot. */
+#confirmBar { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 2px; }
+#confirmBar[hidden], #boardDice[hidden] { display: none; }
+#boardDice { position: absolute; top: 8px; left: 8px; z-index: 2; display: flex; gap: 6px; }
+#boardDice svg { width: 40px; height: 40px; filter: drop-shadow(0 2px 2px #0007); }
 @keyframes pulse { 50% { opacity: .35; } }
 input { font: inherit; color: var(--ink); background: #0004; border: 1px solid var(--brass); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; max-width: 280px; }
 #online { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
@@ -107,9 +113,9 @@ input { font: inherit; color: var(--ink); background: #0004; border: 1px solid v
       <div class="row"><input id="nameIn" placeholder="Your name" maxlength="24" autocomplete="nickname" aria-label="Your name"></div>
       <div class="row"><button id="hostBtn">Host a room</button></div>
       <div id="hostPanel" hidden>
-        <h2>Seats</h2>
+        <h2>Players</h2>
         <div class="row" id="pickSeats"></div>
-        <div id="hostSeats"></div>
+        <div class="small">Friends join with the room's code. A Greedy bot plays any seat nobody takes; you can set the bots in the room.</div>
         <div class="row"><button id="createBtn">Create the room</button></div>
       </div>
       <div class="row"><input id="codeIn" placeholder="Room code, like VALE-289" maxlength="40" autocomplete="off" aria-label="Room code"></div>
@@ -137,9 +143,11 @@ input { font: inherit; color: var(--ink); background: #0004; border: 1px solid v
 
 <div id="game">
   <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Game board"></svg>
-    <button id="boardReport" hidden>Report a bug or idea</button></div>
+    <button id="boardReport" hidden>Report a bug or idea</button>
+    <div id="boardDice" role="img" hidden></div></div>
   <div id="side">
     <div id="status"></div>
+    <div id="confirmBar" hidden><button id="confirmBtn">Build</button><button id="cancelBtn">Cancel</button></div>
     <div id="dice" class="small"></div>
     <div class="hand" id="hand" aria-label="Your cards"></div>
     <div id="fortunes" class="small"></div>
@@ -180,7 +188,7 @@ const seatColour = p => COLOUR[(st.players[p] || {}).colour] || "#888";
 const SAVE = "wgbg-web-save";
 const S3 = Math.sqrt(3) / 2;
 
-let board = null, st = null, logFrom = 0, mode = null, robberHex = -1, busy = false, players = 4, level = "Greedy", speed = "Normal";
+let board = null, st = null, logFrom = 0, mode = null, pending = null, robberHex = -1, busy = false, players = 4, level = "Greedy", speed = "Normal";
 const SPEEDS = { Slow: 900, Normal: 400, Fast: 40 };
 const $ = id => document.getElementById(id);
 const store = {
@@ -269,7 +277,7 @@ function refresh() {
     setTimeout(() => { wgbg.bot(); busy = false; refresh(); }, thinks ? Math.min(60, SPEEDS[speed]) : SPEEDS[speed]);
   }
 }
-function play(code) { mode = null; robberHex = -1; if (game().play(code)) { movedAt = performance.now(); refresh(); } }
+function play(code) { mode = null; pending = null; robberHex = -1; if (game().play(code)) { movedAt = performance.now(); refresh(); } }
 // Each click redraws the page, so the second click of a double click, or a quick second tap, lands on what the first
 // one drew under it: the roads from a homestead you just placed, End turn where Roll was, the board after Start a
 // game. Only the first click counts, and the table takes nothing for a moment after one of your moves (the screen
@@ -283,7 +291,9 @@ const legalOf = type => st.legal.filter(a => a.type === type);
 
 // ---------------------------------------------------------------- drawing
 function render() {
-  drawBoard(); drawSide();
+  // A build you tapped waits for Confirm, as long as it is still one of your moves.
+  if (pending && !(st.legal || []).some(a => a.code === pending.code)) pending = null;
+  drawBoard(); drawSide(); drawDice(); drawConfirm();
   if (st.over) {
     $("overTitle").textContent = st.winner === st.me ? "You won!" : st.winner >= 0 ? `${st.players[st.winner].name} won` : "Game over";
     $("overText").textContent = st.players.map(p => `${p.name}: ${p.vp}`).join(" · ");
@@ -341,13 +351,30 @@ function drawBoard() {
   // What you can tap now.
   if (st.acting !== st.me || st.over) return;
   const show = t => st.phase === "BUILD_INITIAL_SETTLEMENT" || st.phase === "BUILD_INITIAL_ROAD" || mode === t;
+  // A tap marks the build; Confirm (or a second tap on it) builds it.
+  const mark = a => { if (pending && pending.code === a.code) play(a.code); else { pending = a; render(); } };
   if (show("BUILD_ROAD")) for (const a of legalOf("BUILD_ROAD")) {
+    if (pending && pending.code === a.code) continue;
     const [p, q] = board.edges[+a.payload].map(pos);
-    el("line", { class: "path", x1: p[0], y1: p[1], x2: q[0], y2: q[1], onclick: () => play(a.code) }, svg);
+    el("line", { class: "path", x1: p[0], y1: p[1], x2: q[0], y2: q[1], onclick: () => mark(a) }, svg);
   }
   for (const t of ["BUILD_SETTLEMENT", "BUILD_CITY"]) if (show(t)) for (const a of legalOf(t)) {
+    if (pending && pending.code === a.code) continue;
     const [x, y] = pos(+a.payload);
-    el("circle", { class: "spot", cx: x, cy: y, r: .2, onclick: () => play(a.code) }, svg);
+    el("circle", { class: "spot", cx: x, cy: y, r: .2, onclick: () => mark(a) }, svg);
+  }
+  if (pending) {
+    const go = () => play(pending.code), colour = seatColour(st.me);
+    if (pending.type === "BUILD_ROAD") {
+      const [p, q] = board.edges[+pending.payload].map(pos);
+      el("line", { class: "ghost", x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: "#fff", "stroke-width": .3, "stroke-linecap": "round", onclick: go }, svg);
+      el("line", { class: "ghost", x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: colour, "stroke-width": .18, "stroke-linecap": "round", onclick: go }, svg);
+    } else {
+      const [x, y] = pos(+pending.payload), s = pending.type === "BUILD_CITY" ? .3 : .21;
+      el("circle", { class: "ghost", cx: x, cy: y, r: s + .14, fill: "none", stroke: "#fff", "stroke-width": .06, onclick: go }, svg);
+      el("path", { class: "ghost", d: `M${x - s},${y + s * .7} L${x - s},${y - s * .1} L${x},${y - s * .8} L${x + s},${y - s * .1} L${x + s},${y + s * .7} Z`,
+        fill: colour, stroke: "#fff", "stroke-width": .05, onclick: go }, svg);
+    }
   }
   if (st.phase === "MOVE_ROBBER" && robberHex < 0) {
     const hexes = [...new Set(legalOf("MOVE_ROBBER").map(a => a.a))];
@@ -368,6 +395,7 @@ function statusText() {
     const waiting = who.bot ? `${who.name} (${who.bot}) is playing…` : `Waiting for ${who.name}…`;
     return st.phase === "DECIDE_TRADE" && st.current === st.me ? `Others are answering your offer. ${waiting}` : waiting;
   }
+  if (pending) return `${BUILD_WORDS[pending.type]} here? Confirm, or tap another spot`;
   switch (st.phase) {
     case "BUILD_INITIAL_SETTLEMENT": return "Place a homestead: tap a white spot";
     case "BUILD_INITIAL_ROAD": return "Place a road next to it";
@@ -382,6 +410,28 @@ function statusText() {
     default: return st.phase;
   }
 }
+
+const BUILD_WORDS = { BUILD_ROAD: "Road", BUILD_SETTLEMENT: "Homestead", BUILD_CITY: "Town" };
+const PIPS = { 1: [[2, 2]], 2: [[1, 1], [3, 3]], 3: [[1, 1], [2, 2], [3, 3]], 4: [[1, 1], [3, 1], [1, 3], [3, 3]],
+  5: [[1, 1], [3, 1], [2, 2], [1, 3], [3, 3]], 6: [[1, 1], [3, 1], [1, 2], [3, 2], [1, 3], [3, 3]] };
+/** The last roll's two dice, on the board's corner. */
+function drawDice() {
+  const box = $("boardDice"); box.innerHTML = "";
+  box.hidden = !st.dice;
+  if (!st.dice) return;
+  box.setAttribute("aria-label", `Last roll: ${st.dice[0]} and ${st.dice[1]}`);
+  for (const d of st.dice) {
+    const s = el("svg", { viewBox: "0 0 4 4" }, box);
+    el("rect", { x: .15, y: .15, width: 3.7, height: 3.7, rx: .7, fill: "#f6efdc", stroke: "#2b2118", "stroke-width": .12 }, s);
+    for (const [x, y] of PIPS[d]) el("circle", { cx: x, cy: y, r: .36, fill: d === 1 ? "#b3261e" : "#1b140d" }, s);
+  }
+}
+function drawConfirm() {
+  $("confirmBar").hidden = !pending;
+  if (pending) $("confirmBtn").textContent = `Build the ${BUILD_WORDS[pending.type].toLowerCase()}`;
+}
+$("confirmBtn").onclick = () => { if (pending) play(pending.code); };
+$("cancelBtn").onclick = () => { pending = null; render(); };
 
 function drawSide() {
   $("status").textContent = statusText();
@@ -425,7 +475,7 @@ function drawSide() {
     const builds = [["BUILD_ROAD", "Road"], ["BUILD_SETTLEMENT", "Homestead"], ["BUILD_CITY", "Town"]].filter(([t]) => legalOf(t).length);
     if (builds.length) {
       el("h2", { text: "Build (then tap the board)" }, box);
-      for (const [t, name] of builds) el("button", { text: name, class: mode === t ? "on" : "", onclick: () => { mode = mode === t ? null : t; render(); } }, box);
+      for (const [t, name] of builds) el("button", { text: name, class: mode === t ? "on" : "", onclick: () => { mode = mode === t ? null : t; pending = null; render(); } }, box);
     }
   }
   take(["BUILD_ROAD", "BUILD_SETTLEMENT", "BUILD_CITY"]);
@@ -440,7 +490,7 @@ function drawSide() {
 // The room's code is kept in this browser, so a reload or a second tab goes back into it (its dice secret is kept too).
 const ROOM = "wgbg-web-room", NAME = "wgbg-web-name";
 const SEAT_KINDS = [["friend", "Friend"], ["EASY", "Easy"], ["GREEDY", "Greedy"], ["STRONG", "Strong"], ["MASTER", "Master"], ["empty", "Empty"]];
-let online = false, lastEpoch = -1, botTimer = null, botKey = null, seatCount = 4, hostSeats = ["friend", "GREEDY", "GREEDY", "GREEDY", "GREEDY"];
+let online = false, lastEpoch = -1, botTimer = null, botKey = null, seatCount = 4;
 const keep = {
   get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
@@ -460,21 +510,16 @@ const shareLink = code => location.origin + location.pathname + location.search 
 function say(id, text) { $(id).textContent = text || ""; }
 function myName() { const n = $("nameIn").value.trim(); if (n) keep.set(NAME, n); return n; }
 
-function drawHostSeats() {
-  choice("pickSeats", [4, 5, 6], () => seatCount, v => { seatCount = v; drawHostSeats(); });
-  const box = $("hostSeats"); box.innerHTML = "";
-  for (let i = 1; i < seatCount; i++) {
-    const row = el("div", { class: "seat" }, box);
-    el("div", { class: "who", text: `Seat ${i + 1}` }, row);
-    for (const [spec, label] of SEAT_KINDS) el("button", { text: label, class: hostSeats[i - 1] === spec ? "on" : "", onclick: () => { hostSeats[i - 1] = spec; drawHostSeats(); } }, row);
-  }
-}
+// How many play; the others' seats wait for friends (a Greedy bot plays any nobody takes), set in the room. A room has 4
+// to 6 seats, so 3 players is 4 seats with the 4th empty.
+function drawHostSeats() { choice("pickSeats", [3, 4, 5, 6], () => seatCount, v => seatCount = v); }
+const hostSeats = n => n === 3 ? ["friend", "friend", "empty"] : Array(n - 1).fill("friend");
 $("hostBtn").onclick = () => { $("hostPanel").hidden = !$("hostPanel").hidden; drawHostSeats(); };
 $("createBtn").onclick = async () => {
   const name = myName();
   if (!name) { say("netMsg", "Type your name first"); $("nameIn").focus(); return; }
   say("netMsg", "Opening a room…");
-  try { enterRoom(await net("host", name, hostSeats.slice(0, seatCount - 1).join(","))); }
+  try { enterRoom(await net("host", name, hostSeats(seatCount).join(","))); }
   catch (e) { say("netMsg", e.message); }
 };
 async function joinRoom(typed) {
