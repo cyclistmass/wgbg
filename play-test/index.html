@@ -1,0 +1,1451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Working German Board Game</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --wood: #3b2a1c; --wood-2: #4a3524; --brass: #c9a24a; --brass-2: #e6c66e; --ink: #f3e7cf; --muted: #c8b48f;
+  --panel: #2e2117; --line: #6b4f2e; --good: #8fc46a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--wood); color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button { font: inherit; color: #2b2118; background: linear-gradient(#f1d58a, var(--brass)); border: 1px solid #8a6a2a;
+  border-radius: 8px; padding: 8px 12px; margin: 3px 4px 3px 0; cursor: pointer; min-height: 40px; }
+button:hover { background: linear-gradient(#f7e2a6, var(--brass-2)); }
+button.on { outline: 3px solid #fff3; background: linear-gradient(#fff0c0, #e9c25a); }
+button:disabled { opacity: .45; cursor: default; }
+h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 14px 0 6px; }
+.panel { background: var(--panel); border: 2px solid var(--brass); border-radius: 12px; padding: 12px; }
+#start { max-width: 420px; margin: 8vh auto; text-align: center; padding: 22px 16px; }
+#start .row { margin: 12px 0; }
+#start .row button { min-width: 64px; }
+#game { display: none; height: 100%; }
+#game.show { display: flex; }
+#boardWrap { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+#board { width: 100%; height: 100%; max-height: 100vh; touch-action: manipulation; }
+/* The 3D board (board3d.js) draws under the SVG board, which keeps everything you tap. */
+#board3d { position: absolute; display: block; pointer-events: none; }
+#board.three { position: relative; }
+#side { width: 360px; max-width: 100%; overflow-y: auto; padding: 12px; border-left: 3px solid var(--brass); background: var(--wood-2); }
+#status { font-size: 17px; font-weight: 600; min-height: 26px; }
+.hand { margin-top: 8px; }
+.players { display: grid; gap: 4px; }
+.player { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; background: #0002; }
+.player.acting { outline: 2px solid var(--brass-2); }
+.dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #0008; flex: none; }
+.player .vp { margin-left: auto; font-weight: 700; }
+.small { font-size: 12px; color: var(--muted); }
+.hand { display: flex; gap: 6px; flex-wrap: wrap; }
+.card { min-width: 58px; text-align: center; padding: 6px 4px; border-radius: 8px; color: var(--dark); font-weight: 600; border: 1px solid #0006; }
+.card b { display: block; font-size: 18px; }
+#log { font-size: 13px; color: var(--muted); max-height: 180px; overflow-y: auto; }
+#log div { padding: 1px 0; }
+#over { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #000a; }
+#over.show { display: flex; }
+#over .panel { text-align: center; max-width: 360px; padding: 24px; }
+.hex-target { fill: #fff3; stroke: #fff; stroke-width: .08; cursor: pointer; }
+.spot { fill: #fff; stroke: #2b2118; stroke-width: .05; cursor: pointer; animation: pulse 1.1s ease-in-out infinite; }
+.path { stroke: #fff; stroke-width: .22; stroke-linecap: round; cursor: pointer; opacity: .75; animation: pulse 1.1s ease-in-out infinite; }
+.ghost { cursor: pointer; }
+/* A build waits for Confirm, under the status line: right below the board on a phone, and never over a spot. */
+#confirmBar { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 2px; }
+#confirmBar[hidden], #boardDice[hidden] { display: none; }
+#boardDice { position: absolute; top: 8px; left: 8px; z-index: 2; display: flex; gap: 6px; }
+#boardDice svg { width: 40px; height: 40px; filter: drop-shadow(0 2px 2px #0007); }
+@keyframes pulse { 50% { opacity: .35; } }
+input { font: inherit; color: var(--ink); background: #0004; border: 1px solid var(--brass); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; max-width: 280px; }
+#online { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
+#lobby { display: none; max-width: 480px; margin: 6vh auto; padding: 22px 16px; }
+#lobby.show { display: block; }
+#roomCode { font-size: 30px; font-weight: 800; letter-spacing: 2px; color: var(--brass-2); margin: 6px 0; }
+.seat { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: #0002; margin: 4px 0; flex-wrap: wrap; }
+.seat .who { flex: 1; min-width: 140px; }
+.seat button { min-height: 32px; padding: 4px 8px; font-size: 13px; }
+.msg { color: #ffb4a8; min-height: 18px; }
+/* Google sign-in (#83): who you are online, and Sign in with Google / Sign out, as the app's start screen row. */
+#account:not([hidden]) { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+#accountStatus { font-size: 13px; overflow-wrap: anywhere; }
+#account button { min-height: 36px; padding: 4px 12px; }
+#account button.wood { color: var(--ink); background: linear-gradient(#7a5332, #4e3320); border-color: var(--brass); }
+#accountNote { font-size: 12px; color: var(--brass-2); }
+#accountNote:empty { display: none; }
+#boardWrap { position: relative; }
+#boardReport { position: absolute; top: 8px; right: 8px; min-height: 34px; padding: 5px 10px; font-size: 13px; z-index: 2; }
+#report { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #000a; z-index: 5; padding: 12px; }
+#report.show { display: flex; }
+#report .panel { width: 520px; max-width: 100%; max-height: 100%; overflow-y: auto; }
+#reportNote { width: 100%; height: 110px; resize: vertical; font: 15px/1.35 system-ui, sans-serif; color: #2b2118; background: #f3e7cf;
+  border: 2px solid var(--brass); border-radius: 8px; padding: 8px 10px; }
+#reportShots { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#reportShots .shot { position: relative; }
+#reportShots img { height: 64px; border: 1px solid var(--brass); border-radius: 4px; display: block; }
+#reportShots .shot button { position: absolute; top: -8px; right: -8px; min-height: 0; padding: 0 6px; margin: 0; border-radius: 10px;
+  background: #c0392b; color: #fff; border: 0; font-weight: 700; }
+#reportStatus { color: #d9b865; min-height: 18px; font-size: 13px; }
+/* The trade chest (the app's TradePanel): dark wood, brass edge; one row of cards, top half asks, bottom half offers. */
+#trade { margin: 10px 0 4px; padding: 10px; border: 3px solid var(--brass); border-radius: 14px;
+  background: linear-gradient(#3a2716, #24170d); box-shadow: inset 0 0 0 1px #0008; }
+#trade[hidden], #tradeToggle[hidden] { display: none; }
+#trade .tstatus { font-weight: 700; }
+#trade .hint, #trade .changes { font-size: 12px; color: var(--muted); }
+#bankRates { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
+#trade .after { font-size: 13px; color: #8bd18b; font-weight: 700; }
+#trade .answers { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; margin: 4px 0; }
+#trade .answers .yes { color: #8bd18b; } #trade .answers .no { color: #e57373; } #trade .answers .ctr { color: #e6c66e; }
+#trade .tcards { display: flex; gap: 6px; margin: 8px 0 4px; }
+#trade .tcard { flex: 1; min-width: 0; max-width: 64px; text-align: center; }
+#trade .tface .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#trade .tcards.eight { gap: 4px; } #trade .tcards.eight .tface { font-size: 9.5px; }
+/* Eight cards (Age of Chivalry's goods) leave a card about 37 px on a phone: a name too long for it takes two lines,
+   broken at its soft hyphen (cardLabel), or anywhere for a name with none, never cut short (#276). */
+#trade .tcards.eight .tface .name { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.1; }
+#trade .tface { position: relative; height: 78px; border-radius: 8px; border: 1px solid #0008; overflow: hidden; color: var(--dark); font-weight: 700; font-size: 11px; }
+#trade .tface.dim { opacity: .55; }
+#trade .tface button { position: absolute; left: 0; right: 0; height: 50%; margin: 0; padding: 0; min-height: 0; border: 0; border-radius: 0;
+  background: transparent; font-weight: 800; font-size: 15px; color: #fff; text-shadow: 0 1px 2px #000; }
+#trade .tface button:disabled { opacity: 1; }
+#trade .tface .ask { top: 0; } #trade .tface .offer { bottom: 0; }
+#trade .tface .ask:not(:disabled):hover { background: #fff3; } #trade .tface .offer:not(:disabled):hover { background: #0002; }
+#trade .tface .name { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; }
+#trade .tface .plus { background: #2e7d32cc; } #trade .tface .minus { background: color-mix(in srgb, var(--hot) 80%, transparent); }
+#trade .under { font-size: 12px; color: var(--muted); min-height: 18px; }
+#trade .back { min-height: 22px; padding: 0 8px; margin: 0; font-size: 13px; background: #0003; color: var(--ink); border-color: var(--line); }
+#trade .pills button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+#trade .pills button.ctr { background: linear-gradient(#f3d27a, #d9a93a); }
+#trade .pills button.on { background: linear-gradient(#bfe8a6, #79b85a); }
+#trade .tbuttons button { min-width: 78px; font-weight: 700; }
+#trade .tbuttons .go { background: linear-gradient(#bfe8a6, #79b85a); }
+#trade .tbuttons .no { background: linear-gradient(#f2b2a6, #d26b5a); }
+#trade .tbuttons .ctr { background: linear-gradient(#f3d27a, #d9a93a); }
+/* A landscape window gets the start menu side by side: a game against the bots on the left, Play online on the right. */
+@media (min-width: 761px) and (orientation: landscape) {
+  #start { max-width: 880px; margin: 5vh auto; }
+  #menu:not([hidden]) { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start; }
+  #online { border-top: 0; margin-top: 0; padding-top: 0; padding-left: 28px; border-left: 1px solid var(--line); }
+}
+@media (max-width: 760px) {
+  #game.show { flex-direction: column; height: auto; }
+  /* The board stays in view while you scroll to the buttons. */
+  #boardWrap { height: 48vh; flex: none; position: sticky; top: 0; z-index: 1; }
+  #side { width: 100%; border-left: 0; border-top: 3px solid var(--brass); }
+}
+</style>
+<!-- The 3D board's three.js (board3d.js), a pinned release; fetched only once the 3D board is turned on. -->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="start" class="panel">
+  <h1>Working German Board Game</h1>
+  <p class="small">Against the bots, or online with friends, in your browser.</p>
+  <div id="loading">Loading the game…</div>
+  <div id="menu" hidden>
+    <div id="local">
+    <h2>Rules</h2>
+    <div class="row" id="pickRules"></div>
+    <h2>Players</h2>
+    <div class="row" id="pickPlayers"></div>
+    <h2>Bots</h2>
+    <div class="row" id="pickLevel"></div>
+    <h2>Bot speed</h2>
+    <div class="row" id="pickSpeed"></div>
+    <div class="row"><button id="startBtn">Start a game</button></div>
+    <div class="row"><button id="continueBtn" hidden>Continue your game</button></div>
+    <div class="row"><button id="reportStartBtn">Report a bug or idea</button></div>
+    </div>
+    <div id="online">
+      <h2>Play online</h2>
+      <div class="row"><button id="backRoomBtn" hidden></button></div>
+      <div class="row" id="account" hidden><span id="accountStatus"></span><button id="signInBtn" hidden>Sign in with Google</button><button id="signOutBtn" class="wood" hidden>Sign out</button></div>
+      <div id="accountNote" class="note" role="status"></div>
+      <div class="row"><input id="nameIn" placeholder="Your name" maxlength="24" autocomplete="nickname" aria-label="Your name"></div>
+      <div class="row"><button id="hostBtn">Host a room</button></div>
+      <div id="hostPanel" hidden>
+        <h2>Rules</h2>
+        <div class="row" id="pickHostRules"></div>
+        <h2>Players</h2>
+        <div class="row" id="pickSeats"></div>
+        <div class="small">Friends join with the room's code. A Greedy bot plays any seat nobody takes; you can set the bots in the room.</div>
+        <div class="row"><button id="createBtn">Create the room</button></div>
+      </div>
+      <div class="row"><input id="codeIn" placeholder="Room code, like VALE-289" maxlength="40" autocomplete="off" aria-label="Room code"></div>
+      <div class="row"><button id="joinBtn">Join a room</button></div>
+      <div id="netMsg" class="msg" role="status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="lobby" class="panel">
+  <h1>Room</h1>
+  <div id="roomCode"></div>
+  <div id="lobbyRules" class="small"></div>
+  <div class="small">Friends join with this code, or the link:</div>
+  <div class="row"><input id="shareLink" readonly aria-label="Share link"> <button id="copyBtn">Copy link</button></div>
+  <h2>Seats</h2>
+  <div id="lobbySeats"></div>
+  <div id="lobbyWaiting" class="small"></div>
+  <div class="row">
+    <button id="startOnlineBtn" hidden>Start the game</button>
+    <button id="leaveBtn">Leave the room</button>
+  </div>
+  <div id="lobbyMsg" class="msg" role="status"></div>
+</div>
+
+<div id="game">
+  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Game board"></svg>
+    <button id="boardReport" hidden>Report a bug or idea</button>
+    <div id="boardDice" role="img" hidden></div></div>
+  <div id="side">
+    <div id="status"></div>
+    <div id="confirmBar" hidden><button id="confirmBtn">Build</button><button id="cancelBtn">Cancel</button></div>
+    <div id="dice" class="small"></div>
+    <div id="ckInfo" class="small" hidden></div>
+    <div class="hand" id="hand" aria-label="Your cards"></div>
+    <div id="fortunes" class="small"></div>
+    <div id="actions"></div>
+    <button id="tradeToggle" hidden>Trade with players</button>
+    <div id="trade" hidden aria-label="Trade"></div>
+    <h2>Players</h2>
+    <div class="players" id="players"></div>
+    <h2>Log</h2>
+    <div id="log"></div>
+    <h2>Costs</h2>
+    <div class="small" id="costs"></div>
+    <h2>Settings</h2>
+    <div class="row"><button id="reportSetting" aria-pressed="false">Report button on the board</button></div>
+    <div class="row"><button id="board3dSetting" aria-pressed="false">3D board</button><span id="board3dNote" class="small"></span></div>
+    <div class="row" style="margin-top:12px"><button id="quitBtn">New game</button> <button id="reportBtn">Report a bug or idea</button></div>
+  </div>
+</div>
+
+<div id="over"><div class="panel"><h1 id="overTitle"></h1><p id="overText"></p><button id="againBtn">Play again</button></div></div>
+
+<div id="report" role="dialog" aria-modal="true" aria-labelledby="reportTitle"><div class="panel">
+  <h1 id="reportTitle">Report a bug or an idea</h1>
+  <div class="row" id="reportKinds"></div>
+  <textarea id="reportNote" maxlength="4000" aria-label="Your report"></textarea>
+  <div class="row" id="reportShots"></div>
+  <div class="row"><button id="reportSend">Send</button> <button id="reportCopy">Copy</button> <button id="reportClose">Close</button></div>
+  <div id="reportStatus" role="status"></div>
+  <input type="file" id="reportFile" accept="image/*" hidden>
+</div></div>
+
+<script>
+"use strict";
+const RES = ["Timber", "Clay", "Fleece", "Grain", "Stone"];
+// The look the board module gives the rest of the page (wgbg.look(): the board's id, its sea, each card's colour).
+let LOOK = null;
+const FORTUNES = ["Sentinel", "Windfall", "Corner the Market", "Trailblazers", "Point card"];
+// A seat's colour as `#rrggbb`: Kotlin sends each player's with the state (SeatColour.argb, the colour the app paints the seat's
+// pieces in; a room's are the host's, or the pre-0.3.4 ones in a room without any).
+const seatColour = p => (st.players[p] || {}).hex || "#888";
+const SAVE = "wgbg-web-save";
+const S3 = Math.sqrt(3) / 2;
+
+let board = null, st = null, logFrom = 0, mode = null, pending = null, robberHex = -1, busy = false, players = 4, level = "Greedy", speed = "Normal";
+// The bots' waits come from Kotlin (wgbg.botDelay: :game's webBotDelay; wgbgNet.turn: OnlineTurn, #278), by these names.
+const SPEEDS = ["Slow", "Normal", "Fast"];
+const $ = id => document.getElementById(id);
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(SAVE)); } catch (e) { return null; } },
+  set(v) { try { localStorage.setItem(SAVE, JSON.stringify(v)); } catch (e) {} },
+  clear() { try { localStorage.removeItem(SAVE); } catch (e) {} },
+};
+
+function el(tag, attrs, parent) {
+  const svg = ["svg", "g", "polygon", "circle", "line", "text", "rect", "path"].includes(tag);
+  const e = svg ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "text") e.textContent = v; else if (k === "onclick") e.addEventListener("click", v); else e.setAttribute(k, v);
+  }
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const pos = v => [board.vertices[v][0] * S3, board.vertices[v][1] * 0.5];
+
+// ---------------------------------------------------------------- start screen
+function choice(id, values, get, set, label) {
+  const box = $(id); box.innerHTML = "";
+  for (const v of values) el("button", { text: label ? label(v) : v, class: v === get() ? "on" : "", onclick: () => { set(v); choice(id, values, get, set, label); } }, box);
+}
+function showMenu() {
+  $("game").classList.remove("show"); $("over").classList.remove("show"); $("lobby").classList.remove("show"); $("start").style.display = "";
+  $("loading").hidden = true; $("menu").hidden = false;
+  choice("pickPlayers", [3, 4, 5, 6], () => players, v => players = v);
+  choice("pickLevel", ["Easy", "Greedy", "Strong", "Master"], () => level, v => level = v);
+  choice("pickSpeed", SPEEDS, () => speed, v => { speed = v; try { localStorage.setItem("wgbg-web-speed", v); } catch (e) {} });
+  drawRulesChoices();
+  $("continueBtn").hidden = !store.get();
+  // The online game this browser was in, if it left it for another room's link or the start screen (#267).
+  const back = globalThis.wgbgNet ? wgbgNet.latest() : "";
+  $("backRoomBtn").hidden = !back; $("backRoomBtn").textContent = `Back to your game in ${back}`; $("backRoomBtn").dataset.code = back;
+}
+$("startBtn").onclick = () => { online = false; wgbg.newGame(players, level, chivalry); enterGame(); };
+$("continueBtn").onclick = () => {
+  const s = store.get();
+  online = false;
+  if (s && wgbg.restore(s.players, s.level, s.seed, s.moves.join(","), !!s.chivalry)) enterGame();
+  else { store.clear(); showMenu(); }
+};
+$("quitBtn").onclick = () => {
+  if (online) { if (confirm("Leave this room? A bot plays your seat for the others.")) leaveRoom(); return; }
+  if (confirm("Leave this game and start a new one?")) { store.clear(); showMenu(); }
+};
+$("againBtn").onclick = () => {
+  if (online) { forgetRoom(wgbgNet.code()); dropRoom(); clearAddress(); }
+  else store.clear();
+  showMenu();
+};
+
+function enterGame() {
+  board = JSON.parse(game().board());
+  $("costs").textContent = costsText(board);
+  logFrom = 0; lastEpoch = -1; mode = null; robberHex = -1; $("log").innerHTML = "";
+  $("start").style.display = "none"; $("lobby").classList.remove("show"); $("game").classList.add("show");
+  $("quitBtn").textContent = online ? "Leave the room" : "New game";
+  $("againBtn").textContent = online ? "Back to the start" : "Play again";
+  refresh();
+}
+// The game being played: against the bots here (wgbg), or an online room (wgbgNet); both draw the same way.
+const game = () => online ? wgbgNet : wgbg;
+
+// ---------------------------------------------------------------- game loop
+function refresh() {
+  st = JSON.parse(game().state(logFrom));
+  if (!st) return;
+  if (online && st.logEpoch !== lastEpoch) {
+    // The room's history changed under us (a move refused): the log starts again.
+    lastEpoch = st.logEpoch; logFrom = 0; $("log").innerHTML = "";
+    st = JSON.parse(wgbgNet.state(0));
+  }
+  for (const line of st.log) {
+    const [seat, text] = line.split("\t");
+    const d = el("div", {}, $("log"));
+    el("span", { class: "dot", style: `display:inline-block;width:10px;height:10px;margin-right:6px;background:${seatColour(seat)}` }, d);
+    d.appendChild(document.createTextNode(`${st.players[seat].name} ${text}`));
+  }
+  logFrom = st.logSize;
+  $("log").scrollTop = $("log").scrollHeight;
+  if (online) { render(); botTurn(); return; }
+  const rec = JSON.parse(wgbg.record());
+  if (st.over) store.clear(); else store.set(rec);
+  render();
+  if (!st.over && st.acting !== st.me && !busy) {
+    busy = true;
+    setTimeout(() => { wgbg.bot(); busy = false; refresh(); }, wgbg.botDelay(speed));
+  }
+}
+function play(code) { mode = null; pending = null; robberHex = -1; if (game().play(code)) { movedAt = performance.now(); refresh(); } }
+// Each click redraws the page, so the second click of a double click, or a quick second tap, lands on what the first
+// one drew under it: the roads from a homestead you just placed, End turn where Roll was, the board after Start a
+// game. Only the first click counts, and the board and your move buttons take nothing for a moment after one of your
+// moves. Everything else (Report, Settings, New game, the screen that says who won, the menus) takes a click at once
+// (#270): a tap on Report right after a move must open it.
+let movedAt = -1e9;
+const MOVE_TARGETS = "#board, #confirmBar, #actions";
+addEventListener("click", e => {
+  if (e.target.closest && e.target.closest("input, textarea, select")) return;
+  const onMoves = !!(e.target.closest && e.target.closest(MOVE_TARGETS));
+  if (e.detail > 1 || (performance.now() - movedAt < 300 && onMoves)) { e.stopPropagation(); e.preventDefault(); }
+}, true);
+const legalOf = type => st.legal.filter(a => a.type === type);
+
+// ---------------------------------------------------------------- drawing
+function render() {
+  // A build you tapped waits for Confirm, as long as it is still one of your moves.
+  if (pending && !(st.legal || []).some(a => a.code === pending.code)) pending = null;
+  drawBoard(); drawSide(); drawDice(); drawConfirm(); promptInView();
+  if (st.over) {
+    $("overTitle").textContent = st.winner === st.me ? "You won!" : st.winner >= 0 ? `${st.players[st.winner].name} won` : "Game over";
+    $("overText").textContent = st.ck ? chivalryScores() : st.players.map(p => `${p.name}: ${p.vp}`).join(" · ");
+    $("over").classList.add("show");
+  }
+}
+
+function drawBoard() {
+  const root = $("board"); root.innerHTML = "";
+  // With the 3D board on, the board is seen tilted: everything here is squashed to match (a tile top on the 3D board
+  // is where its outline is here), and the 3D board draws what its module places (wgbg.models).
+  const squash = three ? Math.cos(three.tilt) : 1;
+  root.classList.toggle("three", !!three);
+  const xs = board.vertices.map(p => p[0] * S3), ys = board.vertices.map(p => p[1] * 0.5);
+  const pad = 1.6;
+  let minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad, minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+  // Every player's pieces left lie around the island (#292) when the board lays them, so the view holds the box the
+  // table sends for them all. The 3D board lays none.
+  const supplies = LOOK.supplies && !three && st.supplyBox;
+  if (supplies) {
+    minX = Math.min(minX, st.supplyBox[0]); minY = Math.min(minY, st.supplyBox[1]);
+    maxX = Math.max(maxX, st.supplyBox[2]); maxY = Math.max(maxY, st.supplyBox[3]);
+  }
+  root.setAttribute("viewBox", `${minX} ${minY * squash} ${maxX - minX} ${(maxY - minY) * squash}`);
+  const svg = squash === 1 ? root : el("g", { transform: `scale(1 ${squash})` }, root);
+  // The board module draws the board (flatshapes.js, from the shared FlatScene), the piles of pieces left in front of
+  // each seat too (you at the bottom); with the 3D board on, its module's models (board3d.js, from the shared
+  // ModelScene) draw the slots they cover and the flat board the rest.
+  const models = three ? JSON.parse(game().models(three.served.join(","))) : null;
+  const colours = st.players.map((p, i) => seatColour(i)).join(",");
+  const shapes = JSON.parse(game().scene(colours, models ? models.covers.join(",") : "", st.me)) || [];
+  drawFlatScene(svg, shapes, $("boardWrap"));
+  if (models) three.draw(models, seatColour);
+
+  // What you can tap now.
+  if (st.acting !== st.me || st.over) return;
+  const show = t => st.phase === "BUILD_INITIAL_SETTLEMENT" || st.phase === "BUILD_INITIAL_ROAD" || mode === t || (st.ck && chivalryAuto());
+  // A tap marks the build; Confirm (or a second tap on it) builds it.
+  const mark = a => { if (pending && pending.code === a.code) play(a.code); else { pending = a; render(); } };
+  if (show("BUILD_ROAD")) for (const a of legalOf("BUILD_ROAD")) {
+    if (pending && pending.code === a.code) continue;
+    const [p, q] = board.edges[+a.payload].map(pos);
+    el("line", { class: "path", x1: p[0], y1: p[1], x2: q[0], y2: q[1], onclick: () => mark(a) }, svg);
+  }
+  for (const t of ["BUILD_SETTLEMENT", "BUILD_CITY"]) if (show(t)) for (const a of legalOf(t)) {
+    if (pending && pending.code === a.code) continue;
+    const [x, y] = pos(+a.payload);
+    el("circle", { class: "spot", cx: x, cy: y, r: .2, onclick: () => mark(a) }, svg);
+  }
+  if (st.ck) drawChivalryTargets(svg, mark);
+  if (pending && BUILD_WORDS[pending.type]) {
+    const go = () => play(pending.code), colour = seatColour(st.me);
+    if (pending.type === "BUILD_ROAD") {
+      const [p, q] = board.edges[+pending.payload].map(pos);
+      el("line", { class: "ghost", x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: "#fff", "stroke-width": .3, "stroke-linecap": "round", onclick: go }, svg);
+      el("line", { class: "ghost", x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: colour, "stroke-width": .18, "stroke-linecap": "round", onclick: go }, svg);
+    } else {
+      const [x, y] = pos(+pending.payload), s = pending.type === "BUILD_CITY" ? .3 : .21;
+      el("circle", { class: "ghost", cx: x, cy: y, r: s + .14, fill: "none", stroke: "#fff", "stroke-width": .06, onclick: go }, svg);
+      el("path", { class: "ghost", d: `M${x - s},${y + s * .7} L${x - s},${y - s * .1} L${x},${y - s * .8} L${x + s},${y - s * .1} L${x + s},${y + s * .7} Z`,
+        fill: colour, stroke: "#fff", "stroke-width": .05, onclick: go }, svg);
+    }
+  }
+  if (st.phase === "MOVE_ROBBER" && robberHex < 0) {
+    const hexes = [...new Set(legalOf("MOVE_ROBBER").map(a => a.a))];
+    for (const i of hexes) {
+      const h = board.hexes[i];
+      el("polygon", { class: "hex-target", points: h.v.map(pos).map(p => p.join(",")).join(" "), onclick: () => {
+        const opts = legalOf("MOVE_ROBBER").filter(a => a.a === i);
+        if (opts.length === 1) play(opts[0].code); else { robberHex = i; render(); }
+      } }, svg);
+    }
+  }
+}
+
+function statusText() {
+  if (st.over) return "Game over";
+  const who = st.players[st.acting];
+  if (st.acting !== st.me) {
+    const waiting = who.bot ? `${who.name} (${who.bot}) is playing…` : `Waiting for ${who.name}…`;
+    return (st.phase === "DECIDE_TRADE" || st.phase === "DECIDE_ACCEPTEES") && st.current === st.me ? `Others are answering your offer. ${waiting}` : waiting;
+  }
+  if (pending) return BUILD_WORDS[pending.type] ? `${BUILD_WORDS[pending.type]} here? Confirm, or tap another spot` : `${pending.text}? Confirm, or tap another spot`;
+  const ckWords = st.ck ? chivalryStatus() : null;
+  if (ckWords) return ckWords;
+  switch (st.phase) {
+    case "BUILD_INITIAL_SETTLEMENT": return "Place a homestead: tap a white spot";
+    case "BUILD_INITIAL_ROAD": return "Place a road next to it";
+    case "DISCARD": return `A 7: discard ${st.discardOwed} card${st.discardOwed === 1 ? "" : "s"}`;
+    case "MOVE_ROBBER": return robberHex < 0 ? "Move the Bandit: tap a tile" : "Who do you rob?";
+    case "DECIDE_TRADE": case "DECIDE_ACCEPTEES": return st.trade.status;
+    case "EXTRA_BUILD": return "Extra build: build or pass";
+    case "PLAY_TURN": return st.rolled ? "Your turn: build, trade or end it" : "Your turn: roll the dice";
+    default: return st.phase;
+  }
+}
+
+const BUILD_WORDS = { BUILD_ROAD: "Road", BUILD_SETTLEMENT: "Homestead", BUILD_CITY: "Town" };
+const PIPS = { 1: [[2, 2]], 2: [[1, 1], [3, 3]], 3: [[1, 1], [2, 2], [3, 3]], 4: [[1, 1], [3, 1], [1, 3], [3, 3]],
+  5: [[1, 1], [3, 1], [2, 2], [1, 3], [3, 3]], 6: [[1, 1], [3, 1], [1, 2], [3, 2], [1, 3], [3, 3]] };
+/** The last roll's two dice, on the board's corner. */
+function drawDice() {
+  if (st.ck) return drawChivalryDice();
+  const box = $("boardDice"); box.innerHTML = "";
+  box.hidden = !st.dice;
+  if (!st.dice) return;
+  box.setAttribute("aria-label", `Last roll: ${st.dice[0]} and ${st.dice[1]}`);
+  for (const d of st.dice) {
+    const s = el("svg", { viewBox: "0 0 4 4" }, box);
+    el("rect", { x: .15, y: .15, width: 3.7, height: 3.7, rx: .7, fill: "#f6efdc", stroke: "#2b2118", "stroke-width": .12 }, s);
+    for (const [x, y] of PIPS[d]) el("circle", { cx: x, cy: y, r: .36, fill: d === 1 ? LOOK.hot : LOOK.dark }, s);
+  }
+}
+function drawConfirm() {
+  const was = !$("confirmBar").hidden;
+  $("confirmBar").hidden = !pending;
+  if (pending) $("confirmBtn").textContent = BUILD_WORDS[pending.type] ? `Build the ${BUILD_WORDS[pending.type].toLowerCase()}` : pending.text;
+  if (pending && !was) inView($("confirmBar"));
+}
+/** On a phone the board stays at the top while you scroll the side panel under it: after you tap the board, Build and
+ *  Cancel (or who to rob, or another choice) may be under the board or off the screen. Then the page scrolls to put
+ *  them just below the board, with the status line above them when both fit. */
+function inView(box) {
+  const wrap = $("boardWrap");
+  if (!box || box.hidden || getComputedStyle(wrap).position !== "sticky") return;
+  const below = wrap.getBoundingClientRect().bottom, status = $("status").getBoundingClientRect().top, b = box.getBoundingClientRect();
+  const top = b.bottom - status <= innerHeight - below - 12 ? Math.min(status, b.top) : b.top;
+  if (top < below || b.bottom > innerHeight) window.scrollBy(0, top - below - 6);
+}
+/**
+ * A choice the game now waits for that sits in the side panel, not on the board: who to rob (after you tap a tile with
+ * more than one player on it), what to discard on a 7, and someone's trade offer to answer or the partner to pick. Each
+ * is brought into view once, as it appears (#273). In Age of Chivalry also its own: a progress card to discard, the deck
+ * to draw from, a card to hand over or take, the Harbour Charter, and a progress card's choices once you open them.
+ */
+const CK_PROMPTS = { PROGRESS_DISCARD: "Discard a progress card", DEFENDER_DRAW: "Draw a progress card", AQUEDUCT: "Choose a card",
+  COMMERCIAL_HARBOR_RESPOND: "Choose a card", MASTER_MERCHANT: "Choose a card", WEDDING: "Choose a card", SPY: "Take a progress card",
+  COMMERCIAL_HARBOR: "Harbour Charter" };
+let promptShown = "";
+function promptInView() {
+  const t = st.trade, mine = st.acting === st.me && !st.over, group = g => $("actions").querySelector(`[data-group="${g}"]`);
+  const [key, box] = !mine ? ["", null]
+    : st.phase === "MOVE_ROBBER" && robberHex >= 0 ? [`rob ${st.turn} ${robberHex}`, group("Rob")]
+    : st.phase === "DISCARD" ? [`discard ${st.turn}`, group("Discard")]
+    : t && (t.mode === "RESPOND" || t.mode === "PICK_PARTNER") ? [`trade ${tradeKey} ${t.mode}`, $("trade")]
+    : st.ck && CK_PROMPTS[st.phase] ? [`ck ${st.turn} ${st.phase}`, group(CK_PROMPTS[st.phase])]
+    : st.ck && ckPicker !== null ? [`picker ${st.turn} ${ckPicker}`, $("actions").querySelector(".picker")]
+    : ["", null];
+  if (key && key !== promptShown) inView(box);
+  promptShown = key;
+}
+$("confirmBtn").onclick = () => { if (pending) play(pending.code); };
+$("cancelBtn").onclick = () => { pending = null; render(); };
+
+function drawSide() {
+  $("status").textContent = statusText();
+  $("dice").textContent = (st.roll ? `Last roll: ${st.roll} · Turn ${st.turn + 1} · ${st.vpToWin} points to win` : `${st.vpToWin} points to win`) + onlineNote();
+  const pl = $("players"); pl.innerHTML = "";
+  st.players.forEach((p, i) => {
+    const row = el("div", { class: "player" + (i === st.acting && !st.over ? " acting" : "") }, pl);
+    el("span", { class: "dot", style: `background:${seatColour(i)}` }, row);
+    const name = el("div", {}, row);
+    name.appendChild(document.createTextNode(p.name + (p.bot ? ` · ${p.bot}` : "")));
+    const extra = st.ck ? chivalryPlayer(i) : [`${p.cards} card${p.cards === 1 ? "" : "s"}`, `${p.dev} Fortune`, `${p.knights} Sentinels`];
+    if (st.longest === i) extra.push("Longest road");
+    if (st.largest === i) extra.push("Strongest Watch");
+    el("div", { class: "small", text: extra.join(" · ") }, name);
+    el("span", { class: "vp", text: p.vp }, row);
+  });
+
+  const me = st.players[st.me] || { hand: [], devHand: [], devNew: [] }, hand = $("hand"); hand.innerHTML = "";
+  me.hand.forEach((n, r) => { const c = el("div", { class: "card", style: `background:${LOOK.cards[r]}` }, hand); el("b", { text: n }, c); c.appendChild(document.createTextNode(RES[r])); });
+  if (st.ck) drawChivalryHand(hand);
+  const f = me.devHand.map((n, i) => n ? `${n} ${FORTUNES[i]}${me.devNew[i] ? ` (${me.devNew[i]} new)` : ""}` : "").filter(Boolean);
+  $("fortunes").textContent = f.length ? "Fortune cards: " + f.join(", ") : "";
+
+  if (st.ck || !$("ckInfo").hidden) drawChivalryInfo();
+  drawTrade();
+  const box = $("actions"); box.innerHTML = "";
+  // Your moves: on your turn, and Withdraw while the others answer your offer.
+  if (!st.legal.length || st.over) return;
+  const group = (title, acts, label) => {
+    if (!acts.length) return;
+    const g = el("div", { "data-group": title }, box);
+    el("h2", { text: title }, g);
+    for (const a of acts) el("button", { text: label ? label(a) : a.text, onclick: () => play(a.code) }, g);
+  };
+  const used = new Set();
+  const take = types => { const r = st.legal.filter(a => types.includes(a.type)); r.forEach(a => used.add(a.code)); return r; };
+  take(["BUILD_INITIAL_SETTLEMENT"]);
+  if (st.phase === "MOVE_ROBBER") {
+    const r = take(["MOVE_ROBBER"]);
+    if (robberHex >= 0) group("Rob", r.filter(a => a.a === robberHex));
+  }
+  group("Turn", take(["ROLL", "END_TURN"]), a => a.type === "END_TURN" && st.phase === "EXTRA_BUILD" ? "Pass" : a.text);
+  // Build: toggles that show the spots on the board.
+  if (st.phase !== "BUILD_INITIAL_SETTLEMENT" && st.phase !== "BUILD_INITIAL_ROAD") {
+    const builds = [["BUILD_ROAD", "Road"], ["BUILD_SETTLEMENT", "Homestead"], ["BUILD_CITY", "Town"]].filter(([t]) => legalOf(t).length);
+    if (builds.length) {
+      el("h2", { text: "Build (then tap the board)" }, box);
+      for (const [t, name] of builds) el("button", { text: name, class: mode === t ? "on" : "", onclick: () => { mode = mode === t ? null : t; pending = null; render(); } }, box);
+    }
+  }
+  take(["BUILD_ROAD", "BUILD_SETTLEMENT", "BUILD_CITY"]);
+  if (st.ck) drawChivalryActions(box, take, group);
+  group("Fortune", take(["BUY_DEVELOPMENT_CARD", "PLAY_KNIGHT_CARD", "PLAY_ROAD_BUILDING", "PLAY_MONOPOLY", "PLAY_YEAR_OF_PLENTY"]));
+  group("Discard", take(["DISCARD"]));
+  // Offers, answers and picking a partner are the trade chest's (drawTrade).
+  take(["ACCEPT_TRADE", "REJECT_TRADE", "COUNTER_TRADE", "CONFIRM_TRADE", "CANCEL_TRADE"]);
+  const bank = take(["MARITIME_TRADE"]);
+  group("Trade with the bank", bank);
+  // Why a rate beats 4:1, as the app's Harbour tab says it ("Grain 2:1 your harbour · Fabric 2:1 Swift Hulls, this turn").
+  if (bank.length && st.trade && st.trade.bank) el("div", { id: "bankRates", class: "hint", text: st.trade.bank }, box);
+  group("Other", st.legal.filter(a => !used.has(a.code)));
+}
+
+// ---------------------------------------------------------------- trading with the players (the app's trade chest)
+// On your turn after rolling, "Trade with players" opens the chest: tap a card's top half to ask for one, its bottom half
+// to offer one ("−" takes one back), then Offer. It goes round the table; each says yes, no or counters (bots with the
+// app's AI, people from their own browser), and you pick who to trade with, or cancel; Withdraw takes it back while they
+// answer. Someone else's offer opens the chest by itself: Yes, No, or Counter with your own terms. An offer you can't pay
+// is declined for you after 5 seconds, as in the app.
+const AUTO_NO_SECONDS = 5;
+let tradeOpen = false, tradeKey = "", tradeGet = [0, 0, 0, 0, 0], tradeGive = [0, 0, 0, 0, 0], countering = false, tradePick = -1;
+let tradeHand = null, tradeTurn = -1, afterTrade = "", autoNoKey = "", autoNoLeft = 0, autoNoTimer = null;
+// Counts by engine card index: the five resources, and the three goods too in Age of Chivalry.
+const zeros = () => Array(st && st.trade && st.trade.cards ? st.trade.cards.length : 5).fill(0);
+const cardColor = r => LOOK.cards[r];
+
+/** A tap on card [r] (the app's askOffer): a card is never both asked and offered; the other half counts back first. */
+function tapCard(r, how) {
+  const have = st.trade.have[r], most = st.trade.max === 7 ? 7 : 9;
+  if (how === "ask") { if (tradeGive[r] > 0) tradeGive[r]--; else tradeGet[r] = Math.min(most, tradeGet[r] + 1); }
+  else if (how === "offer") { if (tradeGet[r] > 0) tradeGet[r]--; else if (have >= tradeGive[r] + 1 && tradeGive[r] < most) tradeGive[r]++; }
+  else { if (tradeGet[r] > 0) tradeGet[r]--; else if (tradeGive[r] > 0) tradeGive[r]--; }
+  drawTrade();
+}
+/** "" when the game takes this offer (or counter) now, else why not (" " when the cards say it). */
+const tradeCheck = kind => game().tradeCheck(kind, tradeGive.join(","), tradeGet.join(","));
+function sendTrade(kind) {
+  if (game().trade(kind, tradeGive.join(","), tradeGet.join(","))) { tradeGet = zeros(); tradeGive = zeros(); countering = false; movedAt = performance.now(); refresh(); }
+}
+const codeOf = type => (st.legal.find(a => a.type === type) || {}).code;
+
+function drawTrade() {
+  const box = $("trade"), t = st.trade, me = st.players[st.me];
+  const mode = st.over || !t || !me ? "CLOSED" : t.mode;
+  $("tradeToggle").hidden = mode !== "COMPOSE";
+  if (st.turn !== tradeTurn) { tradeTurn = st.turn; afterTrade = ""; tradeOpen = false; }
+  $("tradeToggle").classList.toggle("on", tradeOpen);
+  // Fresh choices whenever the trade moves on (the app's key: turn, phase, who acts, the counters, the cards held).
+  const key = [st.turn, st.phase, st.acting, JSON.stringify(t ? t.takers.map(x => x.p + (x.countered ? "c" : "")) : []), t ? t.have.join() : ""].join("|");
+  if (key !== tradeKey) {
+    tradeKey = key; countering = false; tradeGet = zeros(); tradeGive = zeros();
+    tradePick = t && t.takers.length ? t.takers[0].p : -1;
+  }
+  // #125: after a trade, what you hold now and what changed.
+  const hand = t ? t.have.slice() : null;
+  if (hand && tradeHand && hand.length === tradeHand.length && hand.join() !== tradeHand.join() && !box.hidden) {
+    const parts = t.order.map(r => hand[r] === tradeHand[r] ? "" : `${hand[r]} ${t.cards[r]} (${hand[r] > tradeHand[r] ? "+" : "−"}${Math.abs(hand[r] - tradeHand[r])})`).filter(Boolean);
+    afterTrade = parts.length ? "Now: " + parts.join(" · ") : "";
+  }
+  tradeHand = hand;
+  autoNo(mode, t);
+  const mine = mode === "WAITING" && t.offerer === st.me && st.phase === "DECIDE_TRADE";
+  const show = mode === "RESPOND" || mode === "PICK_PARTNER" || mine || (mode === "COMPOSE" && tradeOpen);
+  box.hidden = !show; box.innerHTML = "";
+  if (!show) return;
+  box.dataset.mode = countering ? "COUNTER" : mode;
+
+  const editing = mode === "COMPOSE" || countering;
+  const taker = mode === "PICK_PARTNER" ? t.takers.find(x => x.p === tradePick) : null;
+  const showGet = editing ? tradeGet : taker ? taker.get : t.get, showGive = editing ? tradeGive : taker ? taker.give : t.give;
+  const why = mode === "COMPOSE" ? tradeCheck("offer") : countering ? tradeCheck("counter") : " ";
+  const status = countering ? `Your counter to ${st.players[st.current].name}`
+    : mode === "COMPOSE" && why.trim() ? why
+    : mode === "RESPOND" && t.cantPay && autoNoLeft ? `${t.status} · No in ${autoNoLeft}`
+    : taker && taker.countered ? `${st.players[taker.p].name}'s counter-offer · Trade on their terms?`
+    : taker ? `${st.players[taker.p].name} said yes · Trade or Cancel` : t.status;
+  el("div", { class: "tstatus", text: status }, box);
+  // Everyone's answer to your offer, by their name.
+  if ((t.offerer === st.me && mode !== "COMPOSE") || (mode === "COMPOSE" && t.answers.some(Boolean))) {
+    const row = el("div", { class: "answers" }, box);
+    st.players.forEach((p, i) => {
+      if (i === st.me) return;
+      const m = t.answers[i];
+      const s = el("span", {}, row);
+      s.appendChild(document.createTextNode(p.name + " "));
+      el("b", { class: m === "✓" ? "yes" : m === "✗" ? "no" : m === "⇄" ? "ctr" : "", text: m }, s);
+    });
+  }
+  if (taker && taker.changes) el("div", { class: "changes", text: taker.changes }, box);
+  if (afterTrade) el("div", { class: "after", text: afterTrade }, box);
+  if (editing) el("div", { class: "hint", text: "Tap top to ask · bottom to offer · either alone is fine" }, box);
+
+  const cards = el("div", { class: t.order.length > 5 ? "tcards eight" : "tcards" }, box);
+  // Where a card's name may break when the card is too narrow for it (a soft hyphen: "Parch-" over "ment").
+  const cardLabel = n => ({ Parchment: "Parch\u00ADment" })[n] || n;
+  for (const r of t.order) {
+    const c = el("div", { class: "tcard", "data-r": r }, cards);
+    const lit = showGet[r] > 0 || showGive[r] > 0;
+    const face = el("div", { class: "tface" + (lit ? "" : " dim"), style: `background:${cardColor(r)}` }, c);
+    el("span", { class: "name", text: cardLabel(t.cards[r]) }, face);
+    const ask = el("button", { class: "ask" + (showGet[r] ? " plus" : ""), text: showGet[r] ? `+${showGet[r]}` : "", "aria-label": `Ask for ${t.cards[r]}` }, face);
+    const offer = el("button", { class: "offer" + (showGive[r] ? " minus" : ""), text: showGive[r] ? `−${showGive[r]}` : "", "aria-label": `Offer ${t.cards[r]}` }, face);
+    if (editing) { ask.onclick = () => tapCard(r, "ask"); offer.onclick = () => tapCard(r, "offer"); } else { ask.disabled = offer.disabled = true; }
+    el("div", { class: "under", text: `have ${t.have[r]}` }, c);
+    if (editing && lit) el("button", { class: "back", text: "−", "aria-label": `Take back ${t.cards[r]}`, onclick: () => tapCard(r, "back") }, c);
+  }
+  // One button per taker: ✓ said yes to your offer, ⇄ countered. Tap to see their terms above, then Trade.
+  if (mode === "PICK_PARTNER") {
+    const pills = el("div", { class: "pills" }, box);
+    for (const x of t.takers) el("button", { class: x.p === tradePick ? "on" : x.countered ? "ctr" : "", text: x.label, onclick: () => { tradePick = x.p; drawTrade(); } }, pills);
+  }
+  // Yes / No / Counter, in the app's words for each moment.
+  const row = el("div", { class: "tbuttons" }, box);
+  const button = (id, cls, text, onclick) => { const b = el("button", { id, class: cls, text }, row); if (onclick) b.onclick = onclick; else b.disabled = true; return b; };
+  const entered = tradeGet.some(Boolean) || tradeGive.some(Boolean);
+  if (countering) {
+    button("tradeYes", "go", "Send", tradeCheck("counter") === "" ? () => sendTrade("counter") : null);
+    button("tradeNo", "no", "Back", () => { countering = false; drawTrade(); });
+  } else if (mode === "COMPOSE") {
+    button("tradeYes", "go", "Offer", why === "" ? () => sendTrade("offer") : null);
+    button("tradeNo", "no", entered ? "Clear" : "Close", () => { if (entered) { tradeGet = zeros(); tradeGive = zeros(); } else tradeOpen = false; render(); });
+  } else if (mode === "RESPOND") {
+    button("tradeYes", "go", "Yes", t.canAccept ? () => play(codeOf("ACCEPT_TRADE")) : null);
+    button("tradeNo", "no", t.cantPay && autoNoLeft ? `No (${autoNoLeft})` : "No", () => play(codeOf("REJECT_TRADE")));
+    button("tradeCounter", "ctr", "Counter", () => { tradeGet = t.get.slice(); tradeGive = t.give.slice(); countering = true; drawTrade(); });
+  } else if (mode === "PICK_PARTNER") {
+    button("tradeYes", "go", "Trade", taker ? () => play(taker.code) : null);
+    button("tradeNo", "no", "Cancel", () => play(codeOf("CANCEL_TRADE")));
+  } else if (t.withdraw) {
+    button("tradeYes", "go", "Trade", null);
+    button("tradeNo", "no", "Withdraw", () => play(codeOf("CANCEL_TRADE")));
+  }
+}
+$("tradeToggle").onclick = () => { tradeOpen = !tradeOpen; render(); };
+
+/** #26/#44: an offer you can't pay is declined for you after a few seconds (the chest counts them down). */
+function autoNo(mode, t) {
+  const key = mode === "RESPOND" && t.cantPay ? `${st.turn}|${st.current}|${st.offer.join()}|${st.ck ? st.ck.offer.join() : ""}` : "";
+  if (key === autoNoKey) return;
+  autoNoKey = key; clearInterval(autoNoTimer); autoNoTimer = null; autoNoLeft = 0;
+  if (!key) return;
+  autoNoLeft = AUTO_NO_SECONDS;
+  autoNoTimer = setInterval(() => {
+    if (autoNoKey !== key) { clearInterval(autoNoTimer); return; }
+    if (--autoNoLeft > 0) { drawTrade(); return; }
+    clearInterval(autoNoTimer); autoNoTimer = null;
+    // Checked like a tap: ignored if the offer moved on.
+    const code = st.trade && st.trade.mode === "RESPOND" && st.trade.cantPay && codeOf("REJECT_TRADE");
+    if (code) play(code);
+  }, 1000);
+}
+
+// ---------------------------------------------------------------- online (#233)
+// The rooms this browser sits in are kept in it, latest first (:game's RoomMemory, in localStorage "wgbg-web-room",
+// #278), so a reload or a second tab goes back into one and the start screen offers "Back to your game in …"; a room link
+// never makes it forget the others (#267). Each room's dice secret is kept too.
+const NAME = "wgbg-web-name";
+const SEAT_KINDS = [["friend", "Friend"], ["EASY", "Easy"], ["GREEDY", "Greedy"], ["STRONG", "Strong"], ["MASTER", "Master"], ["empty", "Empty"]];
+let online = false, lastEpoch = -1, botTimer = null, botKey = null, seatCount = 4;
+const keep = {
+  get: k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+  del: k => { try { localStorage.removeItem(k); } catch (e) {} },
+};
+const sitsIn = code => !!code && wgbgNet.kept().split(",").includes(code);
+const rememberRoom = code => wgbgNet.remember(code), forgetRoom = code => wgbgNet.forget(code);
+// The address names the room being played (#CODE), and nothing once this page has left it or couldn't get in.
+const clearAddress = () => { if (location.hash) history.replaceState(null, "", location.pathname + location.search); };
+const addressHash = () => { try { return decodeURIComponent(location.hash); } catch (e) { return location.hash; } };
+
+// Kotlin answers each call through wgbgNetDone; every change to the room arrives through wgbgNetChanged.
+const calls = new Map(); let callId = 0;
+globalThis.wgbgNetDone = (id, value, error) => { const c = calls.get(id); calls.delete(id); if (c) error ? c.reject(new Error(error)) : c.resolve(value); };
+const net = (fn, ...args) => new Promise((resolve, reject) => { const id = ++callId; calls.set(id, { resolve, reject }); wgbgNet[fn](id, ...args); });
+let changeQueued = false;
+globalThis.wgbgNetChanged = () => { if (!changeQueued) { changeQueued = true; setTimeout(() => { changeQueued = false; onlineChanged(); }, 0); } };
+
+// TODO(#233): the share link is this page's own address; a site for the web game (and the app's JOIN_BASE) may differ.
+const shareLink = code => location.origin + location.pathname + location.search + "#" + code;
+function say(id, text) { $(id).textContent = text || ""; }
+function myName() { const n = $("nameIn").value.trim(); if (n) keep.set(NAME, n); return n; }
+
+// How many play; the others' seats wait for friends (a Greedy bot plays any nobody takes), set in the room. A room has 4
+// to 6 seats, so 3 players is 4 seats with the 4th empty.
+function drawHostSeats() { choice("pickSeats", [3, 4, 5, 6], () => seatCount, v => seatCount = v); }
+const hostSeats = n => n === 3 ? ["friend", "friend", "empty"] : Array(n - 1).fill("friend");
+$("hostBtn").onclick = () => { $("hostPanel").hidden = !$("hostPanel").hidden; drawHostSeats(); };
+$("createBtn").onclick = async () => {
+  const name = myName();
+  if (!name) { say("netMsg", "Type your name first"); $("nameIn").focus(); return; }
+  say("netMsg", "Opening a room…");
+  try { enterRoom(await net("host", name, hostSeats(seatCount).join(","), hostChivalry)); }
+  catch (e) { say("netMsg", e.message); }
+};
+// A room this browser already sits in takes it back without a name (the join finds its seat).
+async function joinRoom(typed) {
+  const name = myName(), code = wgbgNet.normalize(typed);
+  if (!name && !sitsIn(code)) { clearAddress(); say("netMsg", "Type your name, then Join"); $("nameIn").focus(); return; }
+  if (!code) { clearAddress(); say("netMsg", "That isn't a room code"); return; }
+  say("netMsg", `Joining ${code}…`);
+  try { enterRoom(await net("join", code, name)); }
+  catch (e) { clearAddress(); say("netMsg", `${code}: ${e.message}`); }
+}
+$("joinBtn").onclick = () => joinRoom($("codeIn").value);
+$("codeIn").addEventListener("keydown", e => { if (e.key === "Enter") joinRoom($("codeIn").value); });
+async function resumeRoom(code) {
+  say("netMsg", `Back to room ${code}…`);
+  try { enterRoom(await net("rejoin", code)); }
+  catch (e) { forgetRoom(code); online = false; clearAddress(); showMenu(); say("netMsg", `Room ${code}: ${e.message}`); }
+}
+// Where this page's address leads (RoomMemory.arrival): a room link opens that room, whatever game is kept; with no
+// link, the latest room carries on.
+function arrive() {
+  const [how, code] = wgbgNet.arrival(addressHash()).split(":");
+  if (how === "join") { $("codeIn").value = code; joinRoom(code); }
+  else if (how === "rejoin") resumeRoom(code);
+}
+// Lets the room on screen go without leaving it: the seat stays this browser's, and the room stays kept.
+function dropRoom() { clearTimeout(botTimer); botTimer = null; botKey = null; wgbgNet.drop(); online = false; }
+function enterRoom(code) {
+  rememberRoom(code); online = true; say("netMsg", "");
+  if (location.hash.slice(1) !== code) history.replaceState(null, "", "#" + code);
+  onlineChanged();
+}
+async function leaveRoom() {
+  clearTimeout(botTimer); botTimer = null; botKey = null;
+  const code = wgbgNet.code();
+  // A refused leave was dropped without a word (#268): the seat stays yours in the room, so say so.
+  let refused = "";
+  try { await net("leave"); } catch (e) { refused = e.message; }
+  forgetRoom(code); online = false; clearAddress(); showMenu();
+  if (refused) say("netMsg", `Room ${code} didn't take your leaving: ${refused}`);
+}
+
+function onlineChanged() {
+  if (!online) return;
+  const lb = JSON.parse(wgbgNet.lobby());
+  if (!lb) return;
+  if (lb.loading || lb.status === "lobby") { showLobby(lb); return; }
+  if (!$("game").classList.contains("show")) enterGame(); else refresh();
+}
+
+function showLobby(lb) {
+  $("start").style.display = "none"; $("game").classList.remove("show"); $("over").classList.remove("show"); $("lobby").classList.add("show");
+  $("roomCode").textContent = lb.code; $("shareLink").value = shareLink(lb.code);
+  $("lobbyRules").textContent = lb.loading ? "" : lb.chivalry ? "Age of Chivalry" : "Base game";
+  say("lobbyMsg", lb.loading ? (lb.error || "Opening the room…") : lb.error);
+  const box = $("lobbySeats"); box.innerHTML = "";
+  // The seats the host sets up are the player count: a Friend seat waits for a person (its AI player plays if nobody
+  // comes), an Empty one isn't in the game. The app's lobby (Lobby.kt SeatRow) shows these words too.
+  const players = (lb.seats || []).filter(s => s.person || s.bot).length;
+  for (const [i, s] of (lb.seats || []).entries()) {
+    const spec = s.person ? "" : s.open ? (s.bot ? "friend" : "empty") : s.bot.toUpperCase();
+    const row = el("div", { class: "seat" }, box);
+    el("span", { class: "dot", style: `background:${s.hex || "#888"}` }, row);
+    // Nobody marks ready (#309): joining is being ready.
+    const who = s.person ? `${s.name}${s.me ? " (you)" : ""}${i === 0 ? " (host)" : ""}`
+      : spec === "friend" ? "Open seat · an AI player plays if nobody joins" : spec === "empty" ? `Empty · no one plays here (a ${players}-player game)` : `${s.bot} AI`;
+    el("div", { class: "who", text: who }, row);
+    if (lb.host && i > 0 && !s.person) for (const [k, label] of SEAT_KINDS)
+      el("button", { text: label, class: spec === k ? "on" : "", onclick: () => net("seat", i, k).catch(e => say("lobbyMsg", e.message)) }, row);
+  }
+  // The game starts by itself once the last friend seat is taken (#309); the host can start it before that.
+  $("lobbyWaiting").textContent = (lb.waiting || []).length ? lb.waiting.join(" · ")
+    : lb.loading ? "" : lb.host ? "Starts when the last seat is taken, or tap Start the game: AI players take the open seats." : "The game starts when the last seat is taken, or when the host starts it.";
+  $("startOnlineBtn").hidden = !lb.host; $("startOnlineBtn").disabled = !lb.canStart;
+}
+$("startOnlineBtn").onclick = () => net("start").catch(e => say("lobbyMsg", e.message));
+$("leaveBtn").onclick = () => leaveRoom();
+$("backRoomBtn").onclick = () => resumeRoom($("backRoomBtn").dataset.code);
+$("copyBtn").onclick = async () => { try { await navigator.clipboard.writeText($("shareLink").value); say("lobbyMsg", "Link copied"); } catch (e) { $("shareLink").select(); } };
+
+// The room's bots: this browser moves for one when it is first in line (the next takes over after 8 s more of quiet).
+// What to do next is the app's online loop's decision (wgbgNet.turn: :game's OnlineTurn, #278): a "bot" step carries
+// the wait, the line's included. When the timer fires, Kotlin asks the step again and the bot moves only if nothing
+// moved since: your Withdraw (#114) goes out the moment you click it, so it always beats the bot's answer.
+function botTurn() {
+  const t = JSON.parse(wgbgNet.turn(speed)), key = `${t.at}:${t.line}`;
+  if (t.step !== "bot") { clearTimeout(botTimer); botTimer = null; botKey = null; return; }
+  if (key === botKey) return;
+  clearTimeout(botTimer); botKey = key;
+  botTimer = setTimeout(() => {
+    botTimer = null; botKey = null;
+    if (online) { wgbgNet.botMove(t.at); refresh(); }
+  }, Math.max(0, t.failoverMs + t.delayMs));
+}
+function onlineNote() {
+  if (!online || !st.online) return "";
+  const o = st.online;
+  return ` · Room ${o.code}` + (o.error ? ` · ${o.error}` : o.reconnecting ? " · Reconnecting…" : o.pending ? " · Sending…" : "");
+}
+
+// ---------------------------------------------------------------- report a bug or idea (#255)
+// As in the app: from the start screen, from the game (its side panel, or the button on the board that Settings turns on),
+// a Bug or an Idea with your note, the game (it replays move by move) and a picture of the board as it was when you
+// opened the report; it goes to the same Firestore collections as the app's reports, which read it unchanged.
+const REPORT_BUTTON = "wgbg-web-report-button";
+let reportKind = "BUG", reportWithGame = false, reportInRoom = false, reportHasGame = false, reportSending = false;
+let reportShots = []; // base64 JPEGs
+const reportLimits = () => JSON.parse(wgbgReport.limits());
+
+/** The browser and its version, and the system, from what the browser says of itself. */
+function browserInfo() {
+  const ua = navigator.userAgent;
+  const pick = [[/Edg\/([\d.]+)/, "Edge"], [/OPR\/([\d.]+)/, "Opera"], [/(?:Firefox|FxiOS)\/([\d.]+)/, "Firefox"],
+    [/(?:CriOS|HeadlessChrome|Chrome)\/([\d.]+)/, "Chrome"], [/Version\/([\d.]+).*Safari/, "Safari"]].find(([re]) => re.test(ua));
+  const browser = pick ? `${pick[1]} ${ua.match(pick[0])[1]}` : "unknown browser";
+  const os = /Android ([\d.]+)/.test(ua) ? `Android ${ua.match(/Android ([\d.]+)/)[1]}` : /iPhone|iPad|iPod/.test(ua) ? "iOS"
+    : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "macOS" : /CrOS/.test(ua) ? "ChromeOS" : /Linux/.test(ua) ? "Linux" : "unknown system";
+  return { browser, os };
+}
+
+/** [canvas] as a base64 JPEG within the rules' size, the app's way: better quality first, then smaller. */
+function jpegOf(canvas) {
+  const max = reportLimits().shotChars;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    for (const q of [0.8, 0.65, 0.5, 0.35]) {
+      const b64 = canvas.toDataURL("image/jpeg", q).split(",")[1] || "";
+      if (b64 && b64.length <= max) return b64;
+    }
+    const smaller = document.createElement("canvas");
+    smaller.width = Math.max(1, Math.floor(canvas.width * 3 / 4)); smaller.height = Math.max(1, Math.floor(canvas.height * 3 / 4));
+    smaller.getContext("2d").drawImage(canvas, 0, 0, smaller.width, smaller.height);
+    canvas = smaller;
+  }
+  return null;
+}
+/** An image drawn on a canvas at most the shot's longest edge, on [background]. */
+function canvasOf(img, w, h, background) {
+  const k = Math.min(1, reportLimits().edge / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+  const g = c.getContext("2d");
+  if (background) { g.fillStyle = background; g.fillRect(0, 0, c.width, c.height); }
+  g.drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+/** The board as it is now, as a picture: the SVG with the page's styles, drawn on the sea. */
+async function boardShot() {
+  try {
+    const svg = $("board"), r = svg.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("width", r.width); clone.setAttribute("height", r.height);
+    const css = [...document.styleSheets].flatMap(sh => { try { return [...sh.cssRules].map(x => x.cssText); } catch (e) { return []; } });
+    const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    style.textContent = css.join("\n");
+    clone.insertBefore(style, clone.firstChild);
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+    await img.decode();
+    const dpr = window.devicePixelRatio || 1;
+    const c = canvasOf(img, r.width * dpr, r.height * dpr, getComputedStyle($("boardWrap")).backgroundColor || LOOK.sea);
+    if (three) {
+      // The 3D board as it is on screen, then the SVG (its harbours and what you can tap) over it.
+      const under = document.createElement("canvas");
+      under.width = c.width; under.height = c.height;
+      const g = under.getContext("2d");
+      g.drawImage(c, 0, 0);
+      g.drawImage(three.canvas, 0, 0, c.width, c.height);
+      g.drawImage(img, 0, 0, c.width, c.height);
+      return jpegOf(under);
+    }
+    return jpegOf(c);
+  } catch (e) { return null; }
+}
+
+function drawReport() {
+  const box = $("reportKinds"); box.innerHTML = "";
+  for (const [k, label] of [["BUG", "Bug"], ["IDEA", "Idea"]])
+    el("button", { text: label, class: reportKind === k ? "on" : "", "aria-pressed": String(reportKind === k), onclick: () => { reportKind = k; drawReport(); } }, box);
+  if (reportHasGame) el("button", { text: "Include this game", class: reportWithGame ? "on" : "", "aria-pressed": String(reportWithGame),
+    onclick: () => { reportWithGame = !reportWithGame; drawReport(); } }, box);
+  $("reportNote").placeholder = reportKind === "BUG" ? "What went wrong? What did you expect?" : "What would make it better?";
+  const shots = $("reportShots"); shots.innerHTML = "";
+  reportShots.forEach((b64, i) => {
+    const d = el("div", { class: "shot" }, shots);
+    el("img", { src: "data:image/jpeg;base64," + b64, alt: `Screenshot ${i + 1}` }, d);
+    el("button", { text: "✗", "aria-label": `Remove screenshot ${i + 1}`, onclick: () => { reportShots.splice(i, 1); drawReport(); } }, d);
+  });
+  if (reportShots.length < reportLimits().shots)
+    el("button", { text: reportShots.length ? "Add another" : "Add a picture", onclick: () => $("reportFile").click() }, shots);
+  $("reportSend").disabled = reportSending || !($("reportNote").value.trim() || reportWithGame);
+}
+async function openReport(fromGame) {
+  reportInRoom = fromGame && online;
+  reportHasGame = fromGame && wgbgReport.hasGame(reportInRoom);
+  reportKind = "BUG"; reportWithGame = reportHasGame; reportSending = false; reportShots = [];
+  $("reportNote").value = ""; say("reportStatus", "");
+  // The game as it was when the report opened (taken before the sheet covers it).
+  if (fromGame) { const shot = await boardShot(); if (shot) reportShots.push(shot); }
+  drawReport();
+  $("report").classList.add("show");
+  $("reportNote").focus();
+}
+function closeReport() { $("report").classList.remove("show"); reportShots = []; }
+function reportText() {
+  const { browser, os } = browserInfo();
+  return wgbgReport.text(reportInRoom, reportKind, $("reportNote").value, reportWithGame, wgbgReport.device(browser, os),
+    wgbgReport.screen(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1), new Date().toISOString());
+}
+$("reportNote").addEventListener("input", () => { $("reportSend").disabled = reportSending || !($("reportNote").value.trim() || reportWithGame); });
+$("reportSend").onclick = async () => {
+  reportSending = true; drawReport(); say("reportStatus", "Sending…");
+  const shots = reportShots.slice();
+  const text = reportText() + (shots.length ? `\nScreenshots: ${shots.length}` : "");
+  try {
+    const n = Number(await net2("send", text, JSON.stringify(shots)));
+    say("reportStatus", n < shots.length ? "Sent, thank you (the picture didn't go)" : "Sent, thank you");
+    $("reportNote").value = ""; reportShots = [];
+  } catch (e) { say("reportStatus", "Couldn't send (offline?); try Copy"); }
+  reportSending = false; drawReport();
+};
+$("reportCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText(reportText()); say("reportStatus", "Copied: paste it into a message to us"); }
+  catch (e) { say("reportStatus", "Couldn't copy here"); }
+};
+$("reportClose").onclick = closeReport;
+$("report").addEventListener("keydown", e => { if (e.key === "Escape") closeReport(); });
+$("reportFile").addEventListener("change", async () => {
+  const f = $("reportFile").files[0]; $("reportFile").value = "";
+  if (!f) return;
+  try {
+    const img = new Image(); img.src = URL.createObjectURL(f); await img.decode();
+    const b64 = jpegOf(canvasOf(img, img.naturalWidth, img.naturalHeight, "#fff"));
+    URL.revokeObjectURL(img.src);
+    if (b64 && reportShots.length < reportLimits().shots) reportShots.push(b64); else if (!b64) say("reportStatus", "That picture is too big");
+  } catch (e) { say("reportStatus", "Can't open that picture"); }
+  drawReport();
+});
+// wgbgReport.send answers through wgbgNetDone like wgbgNet's calls.
+const net2 = (fn, ...args) => new Promise((resolve, reject) => { const id = ++callId; calls.set(id, { resolve, reject }); wgbgReport[fn](id, ...args); });
+$("reportStartBtn").onclick = () => openReport(false);
+$("reportBtn").onclick = () => openReport(true);
+$("boardReport").onclick = () => openReport(true);
+// Settings: the Report button on the board (off by default, as in the app), remembered in this browser.
+function drawReportSetting() {
+  const on = keep.get(REPORT_BUTTON) === "on";
+  $("reportSetting").classList.toggle("on", on); $("reportSetting").setAttribute("aria-pressed", String(on));
+  $("boardReport").hidden = !on;
+}
+$("reportSetting").onclick = () => { keep.get(REPORT_BUTTON) === "on" ? keep.del(REPORT_BUTTON) : keep.set(REPORT_BUTTON, "on"); drawReportSetting(); };
+drawReportSetting();
+
+// ---------------------------------------------------------------- Google sign-in (#83, the app's account row)
+// Optional: you play at once as a guest, no sign-in wall. "Sign in with Google" links Google to this browser's guest
+// player (its rooms carry on), or switches to the player that Google account already is; your Google name becomes the
+// online name when none is typed. Sign out: a new guest from then on. The row shows once Firebase is in.
+let accountBusy = false;
+const fireCall = (fn, ...args) => new Promise((ok, fail) => globalThis.wgbgFire[fn](...args, ok, e => fail(new Error(e))));
+function drawAccount(a) {
+  $("account").hidden = false;
+  $("accountStatus").textContent = a.google ? a.email || "Signed in" : "Playing as a guest";
+  $("signInBtn").hidden = a.google; $("signOutBtn").hidden = !a.google;
+  $("signInBtn").disabled = $("signOutBtn").disabled = accountBusy;
+  // Your Google name is the online name when you haven't typed one (its first word: seats show short names).
+  const first = (a.name || "").trim().split(/\s+/)[0].slice(0, 24);
+  if (a.google && first && !$("nameIn").value.trim()) $("nameIn").value = first;
+}
+/** The player-facing line for a sign-in's outcome (the app's GoogleAccount.message). */
+function accountMessage(o, a) {
+  const as = a.email ? ` as ${a.email}` : "";
+  if (o === "linked") return `Signed in${as}. Your games and rooms are kept.`;
+  if (o === "signed") return `Signed in${as}.`;
+  if (o === "switched") return `Signed in${as}. That account was already in use, so the games from this browser's guest account stay with the guest.`;
+  if (o === "blocked") return "Your browser blocked Google's sign-in window: allow pop-ups for this page, then tap Sign in with Google again.";
+  return "";
+}
+function accountDone(r) {
+  accountBusy = false;
+  drawAccount(r.account);
+  if (r.outcome) say("accountNote", accountMessage(r.outcome, r.account));
+  // Online play asks who this browser is again (another player id after a switch or a sign-out).
+  if (globalThis.wgbgAccount) wgbgAccount.changed();
+}
+async function refreshAccount() {
+  if (!globalThis.wgbgFire) return;
+  try { accountDone(JSON.parse(await fireCall("account"))); } catch (e) { /* no Firebase here: no account row */ }
+}
+$("signInBtn").onclick = () => {
+  if (accountBusy) return;
+  accountBusy = true; say("accountNote", ""); $("signInBtn").disabled = true;
+  // Straight from the tap (no await before it): Safari opens the popup only then.
+  fireCall("signInGoogle").then(json => {
+    const r = JSON.parse(json);
+    if (r.outcome === "redirect") { say("accountNote", "Opening Google's sign-in…"); return; }
+    accountDone(r);
+  }, e => { accountBusy = false; $("signInBtn").disabled = false; say("accountNote", `Couldn't sign in: ${e.message}`); });
+};
+$("signOutBtn").onclick = () => {
+  if (accountBusy) return;
+  accountBusy = true; say("accountNote", ""); $("signOutBtn").disabled = true;
+  fireCall("signOutGoogle").then(json => { accountDone(JSON.parse(json)); say("accountNote", "Signed out: playing as a new guest"); },
+    () => { accountBusy = false; $("signOutBtn").disabled = false; say("accountNote", "Couldn't sign out (offline?)"); });
+};
+
+// ---------------------------------------------------------------- the 3D board (board3d.js)
+// Settings > "3D board": the app's 3D board from its own models, with three.js (a pinned release, fetched only when it
+// is turned on). Off by default; remembered in this browser. If three.js or the models can't load, the flat board stays.
+const KEEP_3D = "wgbg-web-board3d", TILT_3D = 0.4;
+let three = null, threeStarting = null;
+function drawBoard3dSetting() {
+  const on = keep.get(KEEP_3D) === "on";
+  $("board3dSetting").classList.toggle("on", on); $("board3dSetting").setAttribute("aria-pressed", String(on));
+}
+async function startThree() {
+  if (three || threeStarting) return threeStarting;
+  threeStarting = (async () => {
+    say("board3dNote", " Loading the 3D board…");
+    try {
+      if (!LOOK.model3d) throw new Error("no 3D board module");
+      const [{ createBoard3d }, served] = await Promise.all([import("./board3d.js"), fetch("models/index.json").then(r => r.json())]);
+      if (keep.get(KEEP_3D) !== "on") return;
+      three = createBoard3d($("boardWrap"), $("board"), { tilt: TILT_3D, look: LOOK.model3d, sea: LOOK.sea, served,
+        onReady: () => { if (three && board && st) drawBoard(); },
+        onFail: () => { stopThree(); say("board3dNote", " The 3D board couldn't load here (offline?): the flat board stays."); } });
+      say("board3dNote", "");
+    } catch (e) {
+      three = null;
+      say("board3dNote", " The 3D board couldn't load here (offline?): the flat board stays.");
+    } finally { threeStarting = null; }
+    if (board && st) drawBoard();
+  })();
+  return threeStarting;
+}
+function stopThree() {
+  if (three) { three.dispose(); three = null; }
+  say("board3dNote", "");
+  if (board && st) drawBoard();
+}
+$("board3dSetting").onclick = () => {
+  if (keep.get(KEEP_3D) === "on") { keep.del(KEEP_3D); stopThree(); } else { keep.set(KEEP_3D, "on"); startThree(); }
+  drawBoard3dSetting();
+};
+drawBoard3dSetting();
+
+// ---------------------------------------------------------------- load
+window.addEventListener("error", e => { $("loading").textContent = "Error: " + e.message; document.title = "failed"; });
+try { const s = localStorage.getItem("wgbg-web-speed"); if (SPEEDS.includes(s)) speed = s; } catch (e) {}
+window.addEventListener("wgbg-ready", () => {
+  // The board module (#300): its sea behind the board, before the 3D board reads it.
+  LOOK = JSON.parse(wgbg.look());
+  if (!LOOK) { $("loading").textContent = "The board couldn't load: no board module."; document.title = "failed"; return; }
+  $("boardWrap").style.background = LOOK.sea;
+  // Its dark and hot ink: cards, dice and the trade chest's faces.
+  for (const k of ["dark", "hot"]) if (LOOK[k]) document.documentElement.style.setProperty(`--${k}`, LOOK[k]);
+  if (keep.get(KEEP_3D) === "on") startThree();
+  document.title = "Working German Board Game"; showMenu();
+  $("nameIn").value = keep.get(NAME);
+  refreshAccount();
+  // A share link (…#VALE-289) opens that room, even with another game kept here; else the latest room carries on.
+  arrive();
+  // A link opened in this page while it is open (only the #code changes, no reload) opens that room too, not the one on
+  // screen; the one on screen stays kept, one tap away on the start screen (#267).
+  window.addEventListener("hashchange", () => {
+    const code = wgbgNet.normalize(addressHash());
+    if (!code || (online && code === wgbgNet.code())) return;
+    if (online) dropRoom();
+    showMenu(); arrive();
+  });
+});
+(async () => {
+  globalThis.wgbgModels = {};
+  for (const n of ["value-base.onnx", "value-chivalry.onnx"]) {
+    try { const r = await fetch(n); if (r.ok) globalThis.wgbgModels[n] = new Uint8Array(await r.arrayBuffer()); } catch (e) {}
+  }
+  // The board and theme modules (#300): looks.json lists their spec files, each fetched by its path.
+  globalThis.wgbgLooks = {};
+  try {
+    const r = await fetch("looks.json");
+    if (r.ok) for (const path of await r.json()) {
+      try { const f = await fetch(path); if (f.ok) globalThis.wgbgLooks[path] = await f.text(); } catch (e) {}
+    }
+  } catch (e) {}
+  // Online play's Firebase (loaded on first use), then the game.
+  // firebase-live.js (git-ignored, absent in tests) holds the live web app config; firebase-config.js picks it up.
+  for (const src of ["firebase-live.js", "firebase-config.js", "fire.js", "flatshapes.js", "web.js"]) {
+    const s = document.createElement("script");
+    s.src = src; s.async = false;
+    document.body.appendChild(s);
+  }
+})();
+</script>
+<script>
+"use strict";
+// ---------------------------------------------------------------- Age of Chivalry
+// Everything only Age of Chivalry has, kept here: the rules choice, knights, Ramparts, Capitals, the Trader, the Raiders,
+// the event die, goods, town improvements and progress cards. The table's part comes in st.ck (ChivalryJson.kt); each
+// move it offers carries "spot" (v:<corner>, e:<path>, h:<tile>[:<tile>]) when it is picked on the board.
+const CK_DECKS = ["Guilds", "Crown", "Academy"];
+const CK_DECK_COLOR = ["#e0b83a", "#3f7fd0", "#4f9a4a"];
+// Goods by card index 5..7 (Parchment, Fabric, Silver), shown in deck order: Fabric, Silver, Parchment.
+const CK_CARDS = RES.concat(["Parchment", "Fabric", "Silver"]);
+const CK_ORDER = [6, 7, 5];
+const CK_PROGRESS = ["Transmuter", "Hoist", "Master Mason", "Tinkerer", "Waterworks", "Healer", "Deep Shafts", "Printing Press", "Pathfinders", "Forge",
+  "Harbour Charter", "Grand Factor", "Peddler", "Swift Hulls", "Corner the Field", "Corner the Wares",
+  "Abbot", "Charter of Rights", "Turncoat", "Envoy", "Plot", "Wrecker", "Informer", "Marshal", "Feast"];
+const CK_HINTS = ["Before you roll: choose what the red and ivory dice show.",
+  "Improve a town (Guilds, Crown or Academy) for one commodity less.", "Build Ramparts on one of your towns for free.",
+  "Two tiles trade numbers; 2, 12, 6 and 8 never move.", "Each Grainfield touching your homesteads or towns pays you 2 Grain.",
+  "Turn a homestead into a town for 2 Stone and 1 Grain.", "Each Quarry touching your homesteads or towns pays you 2 Stone.",
+  "Worth 1 point; played at once.", "Build 2 roads for free.", "Up to 2 of your knights go up a strength, free.",
+  "Offer each other player a resource; each must give you a commodity back.", "Pick a player ahead of you on points: see their hand and take 2 cards.",
+  "Put the Trader on a tile next to you: trade its resource 2 for 1, and hold 1 point while it's yours.",
+  "This turn, trade one card type with the bank 2 for 1.", "Name a resource: each other player hands you 2 of it, or all they have.",
+  "Name a commodity: each other player hands you 1 of it, if they have one.", "Move the bandit and take a random card from each player on that tile.",
+  "Worth 1 point; played at once.", "A player takes one of their knights off; you may set down one of yours of that strength.",
+  "Lift any road with a loose end; if it was yours, you may lay it again.", "Knock an enemy knight off one of your roads.",
+  "Everyone level with you on points or ahead throws away half their cards.", "Look at a player's progress cards and take one.",
+  "Supply all your knights for free.", "Everyone ahead of you on points hands you 2 cards of their choosing."];
+const CK_ALCHEMIST = 0, CK_CRANE = 1, CK_INVENTOR = 3;
+// A card aimed at a track or a player shows its choices even when there is only one (the app's asksFirst).
+const CK_ASKS_FIRST = [1, 11, 18, 22];
+const CK_KNIGHT_MODES = [["BUILD_KNIGHT", "New knight"], ["ACTIVATE_KNIGHT", "Supply a knight"], ["PROMOTE_KNIGHT", "Promote a knight"],
+  ["MOVE", "Move a knight"], ["CHASE_ROBBER", "Chase the bandit off"]];
+const CK_BOARD_TYPES = ["BUILD_KNIGHT", "ACTIVATE_KNIGHT", "PROMOTE_KNIGHT", "CHASE_ROBBER", "BUILD_CITY_WALL"];
+// What each piece costs comes with the board (the app's buildCosts, read from the engine's cost tables).
+const costsText = b => b.costs.map(c => `${c.name}: ${c.cost}`).join(" · ") +
+  (b.chivalry ? " · Improve a town: level n costs n of its goods (Guilds Fabric, Crown Silver, Academy Parchment)" : "");
+const DEFENDER_NAME = "Defender of the Realm";
+let chivalry = false, hostChivalry = false, ckKnight = null, ckHex = null, ckPicker = null, ckRed = 1, ckIvory = 1;
+
+function drawRulesChoices() {
+  const rules = ["Base", "Age of Chivalry"];
+  choice("pickRules", rules, () => chivalry ? rules[1] : rules[0], v => chivalry = v === rules[1]);
+  choice("pickHostRules", rules, () => hostChivalry ? rules[1] : rules[0], v => hostChivalry = v === rules[1]);
+}
+
+/** Where a move is picked on the board: [kind, index, index2], or null for a button's move. */
+function ckSpot(a) {
+  if (a.spot) { const [k, i, j] = a.spot.split(":"); return [k, +i, j === undefined ? -1 : +j]; }
+  if (a.type === "BUILD_ROAD") return ["e", +a.payload, -1];
+  if (a.type === "BUILD_SETTLEMENT" || a.type === "BUILD_CITY") return ["v", +a.payload, -1];
+  return null;
+}
+const CK_NOT_AUTO = ["MOVE_KNIGHT", "DISPLACE_KNIGHT", "PLAY_PROGRESS", "IMPROVE_CITY"];
+/** True when every move now is picked on the board (a knight to set down, a town to lose, free roads…): spots show at once. */
+function chivalryAuto() {
+  const board = st.legal.filter(a => a.type !== "CHIVALRY_DONE");
+  return board.length > 0 && board.every(a => ckSpot(a) && !CK_NOT_AUTO.includes(a.type));
+}
+const ckLegal = f => st.legal.filter(f);
+const ckUse = a => a.use !== false;
+const ckHexPoints = i => board.hexes[i].v.map(pos).map(p => p.join(",")).join(" ");
+function ckHexTarget(svg, i, onclick) { el("polygon", { class: "hex-target", points: ckHexPoints(i), onclick }, svg); }
+
+// ---- the board
+/** The spots you can tap for Age of Chivalry's moves, and the one waiting for Confirm. */
+function drawChivalryTargets(svg, mark) {
+  const auto = chivalryAuto();
+  let acts = [];
+  if (auto) acts = st.legal.filter(a => a.spot);
+  else if (mode === "MOVE") {
+    const moves = ckLegal(a => a.type === "MOVE_KNIGHT" || a.type === "DISPLACE_KNIGHT");
+    if (ckKnight === null) {
+      // First tap: which knight.
+      for (const v of [...new Set(moves.map(a => a.a))]) {
+        const [x, y] = pos(v);
+        el("circle", { class: "spot", cx: x, cy: y, r: .28, onclick: () => { ckKnight = v; pending = null; render(); } }, svg);
+      }
+    } else {
+      const [x, y] = pos(ckKnight);
+      el("circle", { cx: x, cy: y, r: .34, fill: "none", stroke: "#fff", "stroke-width": .06 }, svg);
+      acts = moves.filter(a => a.a === ckKnight);
+    }
+  } else if (mode && mode.startsWith("CARD:")) {
+    const [, card, track] = mode.split(":").map(Number);
+    acts = ckLegal(a => a.type === "PLAY_PROGRESS" && a.a === card && a.spot && ckUse(a) && (track === undefined || a.b === track));
+    if (card === CK_INVENTOR) {
+      // The Tinkerer swaps two tiles' numbers: the first tap picks one, the second the other.
+      if (ckHex === null) for (const i of [...new Set(acts.flatMap(a => { const [, h1, h2] = ckSpot(a); return [h1, h2]; }))])
+        ckHexTarget(svg, i, () => { ckHex = i; pending = null; render(); });
+      else {
+        el("polygon", { points: ckHexPoints(ckHex), fill: "none", stroke: "#fff", "stroke-width": .12 }, svg);
+        for (const a of acts) {
+          const [, h1, h2] = ckSpot(a);
+          if ((h1 !== ckHex && h2 !== ckHex) || (pending && pending.code === a.code)) continue;
+          ckHexTarget(svg, h1 === ckHex ? h2 : h1, () => mark(a));
+        }
+      }
+      acts = [];
+    }
+  } else if (mode && mode.startsWith("CAPITAL:")) {
+    const t = +mode.slice(8);
+    acts = ckLegal(a => a.type === "IMPROVE_CITY" && a.a === t && a.b > 0);
+  } else if (mode && CK_BOARD_TYPES.includes(mode)) acts = ckLegal(a => a.type === mode);
+  // A corner the game asks for (a knight to set down, a town to pick) shows even beside other moves.
+  if (!auto) acts = acts.concat(ckLegal(a => a.type === "RELOCATE_KNIGHT" || a.type === "CHOOSE_VERTEX"));
+  for (const a of acts) {
+    if (pending && pending.code === a.code) continue;
+    const sp = ckSpot(a);
+    if (!sp) continue;
+    const [k, i] = sp;
+    if (k === "v") { const [x, y] = pos(i); el("circle", { class: "spot", cx: x, cy: y, r: .2, onclick: () => mark(a) }, svg); }
+    else if (k === "e") { const [p, q] = board.edges[i].map(pos); el("line", { class: "path", x1: p[0], y1: p[1], x2: q[0], y2: q[1], onclick: () => mark(a) }, svg); }
+    else if (k === "h") ckHexTarget(svg, i, () => mark(a));
+  }
+  // The spot waiting for Confirm (a second tap on it plays it too).
+  const sp = pending && !BUILD_WORDS[pending.type] && ckSpot(pending);
+  if (sp) {
+    const go = () => play(pending.code), [k, i, j] = sp;
+    if (k === "v") { const [x, y] = pos(i); el("circle", { class: "ghost", cx: x, cy: y, r: .3, fill: seatColour(st.me), stroke: "#fff", "stroke-width": .08, onclick: go }, svg); }
+    else if (k === "e") { const [p, q] = board.edges[i].map(pos); el("line", { class: "ghost", x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: "#fff", "stroke-width": .3, "stroke-linecap": "round", onclick: go }, svg); }
+    else for (const h of [i, j]) if (h >= 0) el("polygon", { class: "ghost", points: ckHexPoints(h), fill: "#fff6", stroke: "#fff", "stroke-width": .12, onclick: go }, svg);
+  }
+}
+
+const ckEvent = f => f < 0 ? "none" : f < 3 ? "the Raiders' ship" : `${CK_DECKS[f - 3]} gate`;
+/** The red and ivory dice and the event die, on the board's corner. */
+function drawChivalryDice() {
+  const box = $("boardDice"); box.innerHTML = "";
+  const d = st.ck.dice;
+  box.hidden = !d;
+  if (!d) return;
+  box.setAttribute("aria-label", `Last roll: red ${d[0]}, ivory ${d[1]}, event die: ${ckEvent(d[2])}`);
+  for (const [n, face, pip] of [[d[0], "#c0392b", "#fff"], [d[1], "#f6efdc", LOOK.dark]]) {
+    const s = el("svg", { viewBox: "0 0 4 4" }, box);
+    el("rect", { x: .15, y: .15, width: 3.7, height: 3.7, rx: .7, fill: face, stroke: "#2b2118", "stroke-width": .12 }, s);
+    for (const [x, y] of PIPS[n]) el("circle", { cx: x, cy: y, r: .36, fill: pip }, s);
+  }
+  const e = el("svg", { viewBox: "0 0 4 4" }, box), gate = d[2] - 3;
+  el("rect", { x: .15, y: .15, width: 3.7, height: 3.7, rx: .7, fill: gate >= 0 ? CK_DECK_COLOR[gate] : "#2b2b30", stroke: "#2b2118", "stroke-width": .12 }, e);
+  if (gate >= 0) el("path", { d: "M1.1,3.2 L1.1,1.9 A0.9,0.9 0 0 1 2.9,1.9 L2.9,3.2 L2.4,3.2 L2.4,2 A0.4,0.4 0 0 0 1.6,2 L1.6,3.2 Z", fill: "#fff" }, e);
+  else { el("path", { d: "M0.7,2.4 L3.3,2.4 L2.8,3.2 L1.2,3.2 Z", fill: "#e9e1cc" }, e); el("path", { d: "M2,0.7 L2,2.3 L3,2.1 Z", fill: "#e9e1cc" }, e); }
+}
+
+// ---- the side panel
+function chivalryPlayer(i) {
+  const p = st.players[i], c = st.ck.players[i];
+  const out = [`${p.cards} card${p.cards === 1 ? "" : "s"}`, `${c.progress} progress`, `knights ${c.strength}/${c.allStrength}`,
+    CK_DECKS.map((d, t) => `${d} ${c.levels[t]}`).join(" ")];
+  if (c.capitals) out.push(`${c.capitals} Capital${c.capitals > 1 ? "s" : ""}`);
+  if (c.defender) out.push(`${DEFENDER_NAME} ${c.defender}`);
+  if (st.ck.merchantOwner === i) out.push("the Trader");
+  return out;
+}
+function chivalryScores() {
+  return st.players.map((p, i) => {
+    const c = st.ck.players[i], more = [];
+    if (c.capitals) more.push(`${c.capitals} Capital${c.capitals > 1 ? "s" : ""}`);
+    if (c.defender) more.push(`${c.defender} ${DEFENDER_NAME}`);
+    if (c.printed) more.push(`${c.printed} from progress cards`);
+    if (st.ck.merchantOwner === i) more.push("the Trader");
+    return `${p.name}: ${p.vp}` + (more.length ? ` (${more.join(", ")})` : "");
+  }).join(" · ");
+}
+function drawChivalryHand(hand) {
+  const goods = st.ck.goods || [0, 0, 0];
+  for (const c of CK_ORDER) {
+    const d = el("div", { class: "card", style: `background:${LOOK.cards[c]}` }, hand);
+    el("b", { text: goods[c - 5] }, d); d.appendChild(document.createTextNode(CK_CARDS[c]));
+  }
+}
+function drawChivalryInfo() {
+  const box = $("ckInfo"); box.innerHTML = "";
+  box.hidden = !st.ck;
+  if (!st.ck) return;
+  const ck = st.ck;
+  el("div", { id: "raiders", text: `Raiders: ${"●".repeat(ck.ship)}${"○".repeat(Math.max(0, ck.track - ck.ship))} ${ck.ship} of ${ck.track} · ` +
+    `they bring ${ck.raiders}, the knights hold ${ck.defence}` + (ck.attacks ? ` · landed ${ck.attacks}×` : " · the bandit waits until they first land") }, box);
+  if (ck.dice) el("div", { text: `Event die: ${ckEvent(ck.dice[2])}` }, box);
+  const me = ck.players[st.me];
+  if (!me) return;
+  el("div", { text: "Your towns: " + CK_DECKS.map((d, t) => `${d} ${me.levels[t]}`).join(" · ") + ` · on a 7 keep up to ${ck.handLimit} cards` }, box);
+  const cards = (ck.progressHand || []).map((n, c) => n ? `${n > 1 ? n + " " : ""}${CK_PROGRESS[c]}` : "").filter(Boolean);
+  el("div", { id: "progressHand", text: cards.length ? "Progress cards: " + cards.join(", ") : "No progress cards" }, box);
+}
+
+function chivalryStatus() {
+  const ck = st.ck, by = st.players[st.current].name, them = p => (st.players[p] || {}).name || "a player";
+  const list = (res, goods) => res.map((n, r) => n ? `${n} ${RES[r]}` : "").concat(CK_ORDER.map(c => goods[c - 5] ? `${goods[c - 5]} ${CK_CARDS[c]}` : ""))
+    .filter(Boolean).join(" + ") || "nothing";
+  switch (st.phase) {
+    case "DECIDE_TRADE": return `${by} offers ${list(st.offer.slice(0, 5), ck.offer.slice(0, 3))} for your ${list(st.offer.slice(5, 10), ck.offer.slice(3, 6))}`;
+    case "DESERTER_REMOVE": return `${by} played Turncoat against you: tap one of your knights to give up`;
+    case "DESERTER_PLACE": return "Turncoat: tap a glowing corner to set down a knight of that strength, or set none";
+    case "WEDDING": return `${by} played Feast: give them ${ck.giveOwed} card${ck.giveOwed === 1 ? "" : "s"}`;
+    case "COMMERCIAL_HARBOR_RESPOND": return `${by} played Harbour Charter: give back one commodity for the card you got`;
+    case "COMMERCIAL_HARBOR": return "Harbour Charter: give each player a resource for a commodity, or Done";
+    case "BARBARIAN_LOSS": return "The Raiders won: tap one of your towns to lose to them";
+    case "DEFENDER_DRAW": return "Raiders beaten: draw a progress card from a deck";
+    case "PROGRESS_DISCARD": return "Too many progress cards: discard one";
+    case "AQUEDUCT": return "Nothing came your way: take a resource (Academy level 3)";
+    case "MASTER_MERCHANT": return `Grand Factor: take a card from ${them(ck.target)}`;
+    case "SPY": return `Informer: take one of ${them(ck.target)}'s progress cards`;
+    case "RELOCATE_KNIGHT": return "Your knight was driven off: tap a glowing corner to set it down";
+    case "EXTRA_BUILD": return "Extra build: build, improve a town, or supply or promote a knight, or pass";
+    case "PLAY_TURN":
+      if (ck.freeRoads) return `Build ${ck.freeRoads} free road${ck.freeRoads > 1 ? "s" : ""}: tap a path`;
+      if (ck.freePromotions) return `Forge: promote ${ck.freePromotions} more knight${ck.freePromotions > 1 ? "s" : ""} for free: tap one`;
+      if (mode === "MOVE") return ckKnight === null ? "Move a knight: tap one of yours" : "Tap where the knight goes";
+      if (mode && mode.startsWith("CARD:")) { const c = +mode.split(":")[1];
+        return c === CK_INVENTOR ? (ckHex === null ? "Tinkerer: tap a tile" : "Tinkerer: tap the tile to swap numbers with") : `${CK_PROGRESS[c]}: tap a glowing spot`; }
+      if (mode && mode.startsWith("CAPITAL:")) return "Tap the town that becomes your Capital";
+      if (CK_BOARD_TYPES.includes(mode)) return "Tap a glowing corner";
+      return null;
+    default: return chivalryAuto() ? "Tap a glowing spot" : null;
+  }
+}
+
+function drawChivalryActions(box, take, group) {
+  const auto = chivalryAuto();
+  if (mode !== "MOVE") ckKnight = null;
+  if (!(mode && mode.startsWith("CARD:"))) ckHex = null;
+  const toggle = (key, name) => el("button", { text: name, class: mode === key ? "on" : "", onclick: () => {
+    mode = mode === key ? null : key; pending = null; ckKnight = null; ckHex = null; ckPicker = null; render(); } }, box);
+  // Ramparts sit with the other builds.
+  const walls = take(["BUILD_CITY_WALL"]);
+  if (walls.length && !auto) {
+    if (![...box.querySelectorAll("h2")].some(h => h.textContent.startsWith("Build"))) el("h2", { text: "Build (then tap the board)" }, box);
+    toggle("BUILD_CITY_WALL", "Ramparts");
+  }
+  const knights = take(["BUILD_KNIGHT", "ACTIVATE_KNIGHT", "PROMOTE_KNIGHT", "MOVE_KNIGHT", "DISPLACE_KNIGHT", "CHASE_ROBBER"]);
+  if (knights.length && !auto) {
+    el("h2", { text: "Knights (then tap the board)" }, box);
+    for (const [key, name] of CK_KNIGHT_MODES) {
+      const has = key === "MOVE" ? knights.some(a => a.type === "MOVE_KNIGHT" || a.type === "DISPLACE_KNIGHT") : knights.some(a => a.type === key);
+      if (has) toggle(key, name);
+    }
+  }
+  take(["RELOCATE_KNIGHT", "CHOOSE_VERTEX"]);
+  // Town improvements: one button per deck; one that wins the Capital with a choice of towns is picked on the board.
+  const improve = take(["IMPROVE_CITY"]);
+  if (improve.length) {
+    el("h2", { text: "Improve your towns" }, box);
+    for (let t = 0; t < 3; t++) {
+      const opts = improve.filter(a => a.a === t);
+      if (!opts.length) continue;
+      if (opts.length > 1) toggle(`CAPITAL:${t}`, `${opts[0].text.replace(" (claim the Capital)", "")}, and pick your Capital`);
+      else el("button", { text: opts[0].text, onclick: () => play(opts[0].code) }, box);
+    }
+  }
+  // Progress cards: each one that would do something now; a choice opens its picker, or spots on the board.
+  const plays = take(["PLAY_PROGRESS"]).filter(ckUse);
+  const cards = [...new Set(plays.map(a => a.a))];
+  if (ckPicker !== null && !cards.includes(ckPicker)) ckPicker = null;
+  if (cards.length) {
+    el("h2", { text: "Progress cards" }, box);
+    for (const c of cards) {
+      const opts = plays.filter(a => a.a === c), onBoard = opts.every(a => a.spot), asks = opts.length > 1 || onBoard || CK_ASKS_FIRST.includes(c);
+      el("button", { text: `Play ${CK_PROGRESS[c]}${asks ? "…" : ""}`, title: CK_HINTS[c], "data-card": c,
+        class: (mode || "").startsWith(`CARD:${c}`) || ckPicker === c ? "on" : "", onclick: () => {
+          pending = null; ckHex = null;
+          if (onBoard) { mode = mode === `CARD:${c}` ? null : `CARD:${c}`; ckPicker = null; render(); }
+          else if (!asks) play(opts[0].code);
+          else { ckPicker = ckPicker === c ? null : c; mode = null; render(); }
+        } }, box);
+    }
+    if (ckPicker !== null) drawChivalryPicker(box, plays.filter(a => a.a === ckPicker));
+  }
+  group("Discard a progress card", take(["DISCARD_PROGRESS"]));
+  group("Draw a progress card", take(["CHOOSE_PROGRESS_DECK"]));
+  group("Choose a card", take(["CHOOSE_CARD"]));
+  group("Take a progress card", take(["TAKE_PROGRESS"]));
+  group("Harbour Charter", take(["COMMERCIAL_HARBOR_OFFER"]));
+  group(auto ? "Or" : "Done", take(["CHIVALRY_DONE"]));
+  // Offers and counters with goods are the trade chest's (drawTrade), as in a base game.
+  take(["OFFER_TRADE_CK", "COUNTER_TRADE_CK"]);
+}
+
+/** A progress card's choices: the Transmuter's two dice, else one button per choice (a Hoist that wins a Capital: on the board). */
+function drawChivalryPicker(box, opts) {
+  const c = opts[0].a, panel = el("div", { class: "picker" }, box);
+  el("div", { class: "small", text: CK_HINTS[c] }, panel);
+  if (c === CK_ALCHEMIST) {
+    for (const [name, get, set] of [["Red", () => ckRed, v => ckRed = v], ["Ivory", () => ckIvory, v => ckIvory = v]]) {
+      const row = el("div", { class: "row" }, panel);
+      el("span", { class: "small", text: name + " " }, row);
+      for (let n = 1; n <= 6; n++) el("button", { text: n, class: get() === n ? "on" : "", "data-die": name.toLowerCase(), onclick: () => { set(n); render(); } }, row);
+    }
+    const a = opts.find(o => o.b === ckRed && o.c === ckIvory);
+    if (a) el("button", { text: `Roll red ${ckRed} and ivory ${ckIvory}`, class: "go", onclick: () => { ckPicker = null; play(a.code); } }, panel);
+  } else {
+    const tracks = new Set();
+    for (const a of opts) {
+      if (!a.spot) { el("button", { text: a.opt || a.text, onclick: () => { ckPicker = null; play(a.code); } }, panel); continue; }
+      if (tracks.has(a.b)) continue;
+      tracks.add(a.b);
+      el("button", { text: `${a.opt.replace(" (claim the Capital)", "")}, and pick your Capital`, onclick: () => {
+        ckPicker = null; mode = `CARD:${c}:${a.b}`; pending = null; render(); } }, panel);
+    }
+  }
+  el("button", { text: "Cancel", onclick: () => { ckPicker = null; render(); } }, panel);
+}
+</script>
+</body>
+</html>

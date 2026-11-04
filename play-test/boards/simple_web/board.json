@@ -1,0 +1,72 @@
+{
+  "spec": 1,
+  "id": "simple_web",
+  "name": "Simple web",
+  "order": 0,
+  "renderer": "flat-shapes",
+  "theme": "simple_web",
+  "camera": { "kind": "flat", "tilt_max": 0 },
+  "water": { "kind": "flat", "colour": "sea", "animated": false },
+  "supplies": true,
+  "text": { "font": "sans", "min_px": 4 },
+  "harbour": { "out": 0.75, "away_from": "box-centre" },
+  "numbers": { "hot": [6, 8] },
+  "layers": [
+    { "each": "harbour", "slots": ["harbour"] },
+    { "each": "supply", "slots": ["pile"], "hit": [2.4, 0.95, 1.6] },
+    { "each": "hex", "slots": ["tile", "number", "bandit"] },
+    { "each": "edge", "slots": ["road"] },
+    { "each": "board", "slots": ["merchant"] },
+    { "each": "corner", "slots": ["knight", "ramparts", "house", "capital"] }
+  ],
+  "slots": {
+    "harbour": [
+      { "shape": "line", "from": "a", "to": "anchor", "stroke": "pier", "width": 0.07 },
+      { "shape": "line", "from": "b", "to": "anchor", "stroke": "pier", "width": 0.07 },
+      { "shape": "circle", "r": 0.42, "fill": "@resource", "stroke": "ink", "width": 0.04 },
+      { "shape": "text", "text": "{rate}", "size": 0.32, "fill": "ink", "bold": true }
+    ],
+    "pile": [
+      { "shape": "line", "from": "a", "to": "b", "inset": 0.09, "stroke": "dark", "width": 0.18, "cap": "round", "when": "road" },
+      { "shape": "line", "from": "a", "to": "b", "inset": 0.09, "stroke": "@owner", "width": 0.11, "cap": "round", "when": "road" },
+      { "shape": "polygon", "scale": 0.21, "points": [[-1, 0.7], [-1, -0.1], [0, -0.8], [1, -0.1], [1, 0.7]], "turn": "seat", "fill": "@owner", "stroke": "dark", "width": 0.05, "when": "homestead" },
+      { "shape": "polygon", "scale": 0.3, "points": [[-1, 0.8], [-1, -0.2], [0, -0.9], [1, -0.2], [1, 0.8]], "turn": "seat", "fill": "@owner", "stroke": "dark", "width": 0.05, "when": "town" }
+    ],
+    "tile": [
+      { "shape": "hex", "fill": "@resource", "stroke": "tile_edge", "width": 0.06, "join": "round" },
+      { "shape": "text", "text": "{name}", "at": [0, -0.55], "size": 0.22, "fill": "dark", "alpha": 0.7 }
+    ],
+    "number": [
+      { "shape": "circle", "r": 0.36, "fill": "disc", "stroke": "ink", "width": 0.03 },
+      { "shape": "text", "text": "{number}", "size": 0.34, "fill": "hot", "bold": true, "when": "hot" },
+      { "shape": "text", "text": "{number}", "size": 0.34, "fill": "ink", "bold": true, "when": "!hot" }
+    ],
+    "bandit": [
+      { "shape": "circle", "at": [0.02, 0.02], "r": 0.3, "fill": "bandit", "alpha": 0.85 },
+      { "shape": "text", "text": "B", "at": [0.02, 0.02], "size": 0.26, "fill": "light", "bold": true }
+    ],
+    "road": [
+      { "shape": "line", "from": "a", "to": "b", "stroke": "dark", "width": 0.24, "cap": "round" },
+      { "shape": "line", "from": "a", "to": "b", "stroke": "@owner", "width": 0.16, "cap": "round" }
+    ],
+    "merchant": [
+      { "shape": "polygon", "at": [0.45, 0.18], "points": [[0, -0.2], [0.17, 0.12], [-0.17, 0.12]], "fill": "@owner", "stroke": "dark", "width": 0.04, "join": "round" }
+    ],
+    "knight": [
+      { "shape": "circle", "r": 0.2, "fill": "@owner", "stroke": "dark", "width": 0.05, "when": "active" },
+      { "shape": "circle", "r": 0.2, "fill": "panel", "stroke": "@owner", "width": 0.05, "when": "!active" },
+      { "shape": "text", "text": "{level}", "size": 0.22, "fill": "@owner-ink", "bold": true, "when": "active" },
+      { "shape": "text", "text": "{level}", "size": 0.22, "fill": "@owner", "bold": true, "when": "!active" }
+    ],
+    "ramparts": [
+      { "shape": "rect", "scale": 0.36, "at": [-1, -0.75], "size": [2, 1.6], "fill": "dark", "stroke": "@owner", "width": 0.06 }
+    ],
+    "house": [
+      { "shape": "polygon", "scale": 0.21, "points": [[-1, 0.7], [-1, -0.1], [0, -0.8], [1, -0.1], [1, 0.7]], "fill": "@owner", "stroke": "dark", "width": 0.05, "join": "round", "when": "!town" },
+      { "shape": "polygon", "scale": 0.3, "points": [[-1, 0.8], [-1, -0.2], [0, -0.9], [1, -0.2], [1, 0.8]], "fill": "@owner", "stroke": "dark", "width": 0.05, "join": "round", "when": "town" }
+    ],
+    "capital": [
+      { "shape": "circle", "at": [0, -0.27], "r": 0.1, "fill": ["on_top", "on"], "stroke": "dark", "width": 0.03 }
+    ]
+  }
+}

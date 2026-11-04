@@ -1,0 +1,14 @@
+{
+  "spec": 1,
+  "id": "classic_3d",
+  "name": "Classic 3D",
+  "order": 10,
+  "palette": {
+    "number_ink": "#2B2118",
+    "hot": "#C62828",
+    "plate": "#EFCB5E",
+    "knight_band": "#2B2622",
+    "ink": "#1A120B",
+    "idle_knight": "#5E5A55"
+  }
+}
