@@ -20,7 +20,7 @@
         auth.connectAuthEmulator(au, `http://${cfg.emulator.host}:${cfg.emulator.authPort}`, { disableWarnings: true });
         fs.connectFirestoreEmulator(db, cfg.emulator.host, cfg.emulator.firestorePort);
       }
-      loaded = { auth, fs, au, db };
+      loaded = { auth, fs, au, db, app: a };
       return loaded;
     })();
     return loading;
@@ -97,6 +97,42 @@
   const watching = new Map();
   let nextHandle = 1;
 
+  // ---- The Realtime Database (#288) loads on first use, as its own module: a page that never opens a phone's room never
+  // downloads it. Its address is the config's databaseURL (a live page without one can't open those rooms, and says so).
+  const NO_DB = "Rooms made on phones (codes with four digits) need the Realtime Database, and this page has no address for it. " +
+    "Add databaseURL to firebase-live.js: https://<project>-default-rtdb.firebaseio.com for the project in .firebaserc";
+  let loadingDb = null;
+  function loadDb() {
+    if (!loadingDb) loadingDb = (async () => {
+      const L = await load();
+      const cfg = globalThis.wgbgFirebaseConfig;
+      if (!cfg.options.databaseURL) throw new Error(NO_DB);
+      const rt = await import(BASE + "firebase-database.js");
+      const rdb = rt.getDatabase(L.app, cfg.options.databaseURL);
+      if (cfg.emulator) rt.connectDatabaseEmulator(rdb, cfg.emulator.host, cfg.emulator.dbPort);
+      return { rt, rdb };
+    })();
+    return loadingDb;
+  }
+  /** Markers to the database's values: the server's clock, a day count ahead of this device's clock, a fixed moment. */
+  function toRtdb(rt, v) {
+    if (v === null || typeof v !== "object") return v;
+    if (Array.isArray(v)) return v.map(x => toRtdb(rt, x));
+    const keys = Object.keys(v);
+    if (keys.length === 1 && keys[0] === "$serverTime") return rt.serverTimestamp();
+    if (keys.length === 1 && keys[0] === "$inDays") return Date.now() + v.$inDays * DAY;
+    if (keys.length === 1 && keys[0] === "$millis") return v.$millis;
+    const out = {};
+    for (const k of keys) out[k] = toRtdb(rt, v[k]);
+    return out;
+  }
+  /** Moves this page is writing ("{code}/{key}"): their echoes wait for the server's answer. */
+  const inflight = new Set();
+  /** Tells every watcher of room [code] that the server has move [key]. */
+  function tell(code, key, value) {
+    for (const w of watching.values()) if (w.code === code && w.tell) w.tell(key, value);
+  }
+
   globalThis.wgbgFire = {
     /** Anonymous sign-in, as the app's guests: a remembered one if the server still knows it, else a fresh one. */
     signIn(ok, fail) {
@@ -114,7 +150,7 @@
       }).then(ok, e => fail(words(e)));
     },
 
-    /** Signed in with Google now (seats say so, as the app's do). */
+    /** Signed in with Google now (seats say so). */
     isGoogle() { return !!loaded && isGoogleUser(loaded.au.currentUser); },
 
     /**
@@ -165,11 +201,16 @@
       }).then(ok, e => fail(words(e)));
     },
 
-    /** A new room, in a transaction that first checks the code is free (the app's create). */
+    /**
+     * A new room, in a transaction that first checks the code is free (the app's create). A code taken by a game you
+     * aren't in can't even be read (the rules show it only to its players; the browser logs the refused read): that
+     * code is in use too, and the game tries another (#275).
+     */
     create(id, doc, ok, fail) {
       load().then(({ fs, db }) => fs.runTransaction(db, async t => {
         const ref = fs.doc(db, "games", id);
-        if ((await t.get(ref)).exists()) throw new Error("Room code already used");
+        const snap = await t.get(ref).catch(e => { throw e && e.code === "permission-denied" ? new Error("Room code already used") : e; });
+        if (snap.exists()) throw new Error("Room code already used");
         t.set(ref, toFire(fs, JSON.parse(doc)));
       })).then(() => ok(), e => fail(words(e)));
     },
@@ -235,6 +276,127 @@
           fs.addDoc(fs.collection(db, "shots"), { uid, crash: ref.id, n, image, createdAt: fs.serverTimestamp() }).then(() => 1, () => 0)));
         return sent.reduce((a, b) => a + b, 0);
       }).then(ok, e => fail(words(e)));
+    },
+
+    // ---- Realtime Database rooms (#288): the app's RealtimeTransport, on the JS SDK. A room's code with four digits lives
+    // here (what a phone makes since 0.3.9-pre6), two or three on Firestore; the page's RoutedStore picks by the digits. The
+    // paths and formats are RtdbWire's: games/{code} (the room, in a transaction), moves/{code}/{seq} (one string per move).
+    // Values cross as JSON with the same markers as above; the room's JSON is the database's own, not Firestore's.
+
+    /** A new room at games/{code}: the rules let it be made only where none is, so a code in use is refused. */
+    rtdbCreate(code, doc, ok, fail) {
+      loadDb().then(({ rt, rdb }) => rt.set(rt.ref(rdb, "games/" + code), toRtdb(rt, JSON.parse(doc))))
+        .then(() => ok(), e => fail(words(e)));
+    },
+
+    /**
+     * Reads games/{code} and changes it in one transaction: [f] gets the room as JSON ("" for none) and answers with the
+     * whole room to write, {"$skip":true} or {"$error":"..."} (as change() above). A room is read from the server first, so
+     * the transaction starts from the room itself and a room that isn't there is told in [f]'s words; the transaction's own
+     * first pass may still see nothing (the SDK's guess), and then writes nothing back and lets the server answer.
+     */
+    rtdbChange(code, f, ok, fail) {
+      loadDb().then(async ({ rt, rdb }) => {
+        const ref = rt.ref(rdb, "games/" + code);
+        if (!(await rt.get(ref)).exists()) {
+          const out = JSON.parse(f(""));
+          throw new Error(out.$error !== undefined ? out.$error : "Unknown room");
+        }
+        let refusal = null, skipped = false;
+        const res = await rt.runTransaction(ref, cur => {
+          refusal = null; skipped = false;
+          if (cur === null) return cur;
+          try {
+            const out = JSON.parse(f(JSON.stringify(cur)));
+            if (out.$error !== undefined) { refusal = out.$error; return undefined; }
+            if (out.$skip) { skipped = true; return undefined; }
+            return toRtdb(rt, out);
+          } catch (e) { refusal = (e && e.message) || String(e); return undefined; }
+        }, { applyLocally: false });   // no local events: listeners only ever see the committed room
+        if (refusal !== null) throw new Error(refusal);
+        if (skipped) return;
+        if (!res.committed) throw new Error("The room didn't change");
+        if (!res.snapshot.exists()) throw new Error("Unknown room");
+      }).then(() => ok(), e => fail(e && e.code ? words(e) : (e && e.message) || String(e)));
+    },
+
+    /**
+     * One move under moves/{code}/{key}: a plain set of the node, create-only by the rules. Its own echo is held back until
+     * the server has answered (a prediction isn't a move, as hasPendingWrites is for Firestore's); then it goes to the
+     * room's watchers as confirmed. Refused (another phone took that seq), what the server holds there goes on instead.
+     */
+    rtdbSend(code, key, value, ok, fail) {
+      loadDb().then(async ({ rt, rdb }) => {
+        const id = code + "/" + key, ref = rt.ref(rdb, "moves/" + id);
+        inflight.add(id);
+        try { await rt.set(ref, value); } catch (e) {
+          inflight.delete(id);
+          const s = await rt.get(ref).catch(() => null);
+          if (s && s.exists()) tell(code, key, s.val());
+          throw e;
+        }
+        inflight.delete(id);
+        tell(code, key, value);
+      }).then(() => ok(), e => fail(words(e)));
+    },
+
+    /** A seated browser pushing a running game's expiry on (the app's renew); a refusal only costs the next move its turn. */
+    rtdbSetExpire(code, at) {
+      loadDb().then(({ rt, rdb }) => rt.set(rt.ref(rdb, "games/" + code + "/expireAt"), Number(at)))
+        .catch(e => console.warn("The room's expiry wasn't renewed: " + words(e)));
+    },
+
+    /**
+     * The room and its moves from [afterKey] on (the app's observeMoves). The room is read from the server first and given
+     * before any move, so the roster naming a move's sender is there; then the live listeners. Moves come to [onMoves] as
+     * JSON [[key, value], ...], the ones that arrive together in one call, with fromCache true only to say the connection is
+     * down; on reconnecting, the room and the moves after the last one seen are read from the server before it says live.
+     */
+    rtdbObserve(code, afterKey, onRoom, onMoves, onError) {
+      const handle = nextHandle++;
+      const w = { code, stops: [], closed: false, tell: null };
+      watching.set(handle, w);
+      loadDb().then(async ({ rt, rdb }) => {
+        if (w.closed) return;
+        const roomRef = rt.ref(rdb, "games/" + code), movesRef = rt.ref(rdb, "moves/" + code);
+        let lastRoom = null, highest = afterKey, connected = true;
+        const room = s => {
+          const text = s.exists() ? JSON.stringify(s.val()) : "";
+          if (!w.closed && text !== lastRoom) { lastRoom = text; onRoom(text); }
+        };
+        room(await rt.get(roomRef));
+        if (w.closed) return;
+        let pending = [], scheduled = false;
+        const flush = () => {
+          scheduled = false;
+          const out = pending.splice(0);
+          if (!w.closed && out.length) onMoves(JSON.stringify(out), false);
+        };
+        w.tell = (key, value) => {
+          if (key > highest) highest = key;
+          pending.push([key, value]);
+          if (!scheduled) { scheduled = true; Promise.resolve().then(flush); }
+        };
+        const fail = e => { if (!w.closed) onError(words(e)); };
+        const child = s => { if (!w.closed && !inflight.has(code + "/" + s.key)) w.tell(s.key, s.val()); };
+        const q = rt.query(movesRef, rt.orderByKey(), rt.startAt(afterKey));
+        w.stops.push(rt.onValue(roomRef, room, fail), rt.onChildAdded(q, child, fail), rt.onChildChanged(q, child, fail));
+        w.stops.push(rt.onValue(rt.ref(rdb, ".info/connected"), async s => {
+          const up = s.val() === true;
+          if (up === connected || w.closed) return;
+          connected = up;
+          if (!up) { onMoves("[]", true); return; }
+          try {
+            const [r, ms] = await Promise.all([rt.get(roomRef), rt.get(rt.query(movesRef, rt.orderByKey(), rt.startAt(highest)))]);
+            if (w.closed || !connected) return;
+            room(r);
+            ms.forEach(c => { if (!inflight.has(code + "/" + c.key)) w.tell(c.key, c.val()); });
+            await Promise.resolve();
+            if (pending.length === 0 && !w.closed) onMoves("[]", false);
+          } catch (e) { fail(e); }
+        }));
+      }).catch(e => { if (!w.closed) onError(words(e)); });
+      return handle;
     },
 
     unobserve(handle) {

@@ -1,11 +1,14 @@
 "use strict";
-// The live Firebase web app "WGBG web" (registered 2026-10-31). Not in git: see firebase-config.js.
+// The live Firebase web app "WGBG web" on workinggermanboardgame-88d00 (the phones' project since pre6). Not in git: see firebase-config.js.
 globalThis.wgbgFirebaseLive = {
-  "apiKey": "AIzaSyD0J6FcTr_kH1PueUlMOQoyEx1IVt_vA5A",
-  "authDomain": "workinggermangame.firebaseapp.com",
-  "projectId": "workinggermangame",
-  "storageBucket": "workinggermangame.firebasestorage.app",
-  "messagingSenderId": "748565175777",
-  "appId": "1:748565175777:web:05918f0e23d30b217246a0",
-  "measurementId": "G-CCENW1VD41"
+  "projectId": "workinggermanboardgame-88d00",
+  "appId": "1:694175426548:web:f58cf4a6962c9b2c4a7ba1",
+  "databaseURL": "https://workinggermanboardgame-88d00-default-rtdb.firebaseio.com",
+  "storageBucket": "workinggermanboardgame-88d00.firebasestorage.app",
+  "apiKey": "AIzaSyAzlrXgPERlMarL8EQU8IWJ79-vAu4FG-4",
+  "authDomain": "workinggermanboardgame-88d00.firebaseapp.com",
+  "messagingSenderId": "694175426548",
+  "measurementId": "G-3ZSVQ9TL09",
+  "projectNumber": "694175426548",
+  "version": "2"
 };

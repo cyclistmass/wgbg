@@ -1,0 +1,62 @@
+{
+  "spec": 1,
+  "id": "board_3d",
+  "name": "3D board",
+  "order": 10,
+  "renderer": "model3d",
+  "theme": "classic_3d",
+  "camera": { "kind": "ortho", "tilt_max": 0.96, "piece_view_deg": 10 },
+  "water": { "kind": "model", "level": -0.24, "animated": true },
+  "supplies": false,
+  "text": { "font": "sans", "min_px": 0 },
+  "harbour": { "out": 0.80, "plain_out": 0.58, "away_from": "own-hex" },
+  "numbers": { "hot": [6, 8], "face": { "r": 0.27, "text": 0.46, "raise": 0.56, "pips_down": 0.72, "ink": "number_ink", "hot": "hot" } },
+  "depth": { "piece": 2.5, "number": 3.5, "standing": 4.5, "wall": 4.5 },
+  "sizes": { "number": 1.2, "wall": 0.7, "walled_town": 0.9 },
+  "edge": { "light": 0.8, "ink": "ink", "shell": 1.04, "road_shell": 1.06, "sprite": 0.014, "sprite_alpha": 0.85 },
+  "build_marks": { "white": 0.85, "ink": "ink", "ink_alpha": 0.9, "ring_edge": 0.45, "road_edge": 1.45 },
+  "idle_knights": { "colour": "idle_knight", "mix": 0.6 },
+  "overlay": { "renderer": "flat-sprite", "slots": ["harbour", "knight", "merchant"] },
+  "layers": [
+    { "each": "board", "slots": ["water"] },
+    { "each": "coast", "slots": ["coast"] },
+    { "each": "hex", "slots": ["tile", "number"] },
+    { "each": "hex", "slots": ["bandit"] },
+    { "each": "board", "slots": ["merchant"] },
+    { "each": "edge", "slots": ["road"] },
+    { "each": "corner", "slots": ["ramparts", "house"] },
+    { "each": "corner", "slots": ["knight"] }
+  ],
+  "slots": {
+    "water": [{ "model": "live_water_mesh" }],
+    "coast": [{ "model": "coast_a", "heading": "outward" }],
+    "tile": [{ "model": "tile_{terrain}_lod{lod}" }],
+    "number": [
+      { "model": "number_plate", "at": [0.36, 0.45], "height": 0.012, "scale": "number", "depth": "number" },
+      { "model": "digit_{number}", "face": "{number}", "at": [0.36, 0.45], "height": 0.012, "lift": 0.027, "scale": "number", "depth": "number",
+        "when": "!bandit" }
+    ],
+    "bandit": [{ "model": "bandit", "at": [0.36, 0.45], "height": 0.012, "depth": "standing" }],
+    "merchant": [{ "model": "default_merchant", "at": [-0.36, 0.30], "scale": 1.8, "owner": true, "needs": "default_merchant", "depth": "standing" }],
+    "road": [
+      { "model": "{pieces}_road_v", "height": 0.035, "scale": 0.8, "stretch": 2.5, "heading": "along-edge", "halves": { "half": 0.33, "gap": 0.20 },
+        "owner": true, "depth": "piece" }
+    ],
+    "ramparts": [{ "model": "{pieces}_ramparts", "scale": [1.8, "wall"], "owner": true, "depth": "wall" }],
+    "house": [
+      { "model": "{houses}_homestead", "scale": 1.8, "times": { "walled": "walled_town" }, "owner": true, "depth": "standing", "when": ["!town", "!capital"] },
+      { "model": "{houses}_town", "scale": 1.8, "times": { "walled": "walled_town" }, "owner": true, "depth": "standing", "when": ["town", "!capital"] },
+      { "model": "{houses}_capital_{deck}", "scale": 1.8, "times": { "walled": "walled_town" }, "owner": true, "depth": "standing", "when": "capital" }
+    ],
+    "knight": [
+      { "model": "knight_ring", "scale": 1.15, "owner": true, "needs": "{knights}_knight_l{level}", "when": "active" },
+      { "model": "knight_band", "height": 0.008, "scale": 0.92, "needs": "{knights}_knight_l{level}", "when": "active" },
+      { "model": "{knights}_knight_l{level}", "height": 0.031, "owner": true, "needs": "{knights}_knight_l{level}", "depth": "standing", "when": "active" },
+      { "model": "knight_pennant", "height": 0.031, "local": [0.16, -0.16], "owner": true, "needs": ["{knights}_knight_l{level}", "knight_pennant"],
+        "depth": "standing", "when": "active" },
+      { "model": "knight_ring_idle", "scale": 1.15, "owner": true, "needs": "{knights}_knight_l{level}_inactive", "when": "!active" },
+      { "model": "knight_band", "height": 0.008, "scale": 0.92, "needs": "{knights}_knight_l{level}_inactive", "when": "!active" },
+      { "model": "{knights}_knight_l{level}_inactive", "height": 0.031, "owner": true, "needs": "{knights}_knight_l{level}_inactive", "depth": "standing", "when": "!active" }
+    ]
+  }
+}
