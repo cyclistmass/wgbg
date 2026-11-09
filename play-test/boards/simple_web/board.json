@@ -5,7 +5,7 @@
   "order": 0,
   "renderer": "flat-shapes",
   "theme": "simple_web",
-  "camera": { "kind": "flat", "tilt_max": 0 },
+  "camera": { "kind": "flat", "tilt_max": 0.96 },
   "water": { "kind": "flat", "colour": "sea", "animated": false },
   "supplies": true,
   "text": { "font": "sans", "min_px": 4 },
