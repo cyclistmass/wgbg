@@ -39,6 +39,16 @@
     return /AppleWebKit/.test(ua) && (/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua) || !/Chrome|Chromium|Edg|OPR|Android/.test(ua));
   };
   const isGoogleUser = u => !!u && u.providerData.some(p => p.providerId === "google.com");
+  // A guest made by an automated browser (our tests: Playwright sets navigator.webdriver) carries this photo address,
+  // so the player count (.claude/tools/players.js) can tell our tests from new players (Mauro, 2026-11-11). Nothing in
+  // the game reads a guest's photo; the .invalid domain never resolves. A person's browser never sets it.
+  const TEST_GUEST_MARK = "https://test.invalid/wgbg";
+  async function guest(auth, au) {
+    const u = (await auth.signInAnonymously(au)).user;
+    if (typeof navigator !== "undefined" && navigator.webdriver) { try { await auth.updateProfile(u, { photoURL: TEST_GUEST_MARK }); } catch (e) {} }
+    return u;
+  }
+
   function accountOf(u) {
     const g = u && u.providerData.find(p => p.providerId === "google.com");
     return { uid: u ? u.uid : "", google: !!g, email: (g && g.email) || (u && u.email) || "", name: (g && g.displayName) || (u && u.displayName) || "" };
@@ -146,7 +156,7 @@
             await auth.signOut(au);
           }
         }
-        return (await auth.signInAnonymously(au)).user.uid;
+        return (await guest(auth, au)).uid;
       }).then(ok, e => fail(words(e)));
     },
 
@@ -196,7 +206,7 @@
     signOutGoogle(ok, fail) {
       load().then(async ({ auth, au }) => {
         await auth.signOut(au);
-        await auth.signInAnonymously(au);
+        await guest(auth, au);
         return withAccount(au, {});
       }).then(ok, e => fail(words(e)));
     },
@@ -324,12 +334,17 @@
      * One move under moves/{code}/{key}: a plain set of the node, create-only by the rules. Its own echo is held back until
      * the server has answered (a prediction isn't a move, as hasPendingWrites is for Firestore's); then it goes to the
      * room's watchers as confirmed. Refused (another phone took that seq), what the server holds there goes on instead.
+     * With [dev] (this tab holds the seat, #238) movedev/{code}/{key} goes with it in the same write, which the rules check
+     * against the seat's hold: a move from a tab that no longer holds the seat is refused.
      */
-    rtdbSend(code, key, value, ok, fail) {
+    rtdbSend(code, key, value, dev, ok, fail) {
       loadDb().then(async ({ rt, rdb }) => {
         const id = code + "/" + key, ref = rt.ref(rdb, "moves/" + id);
         inflight.add(id);
-        try { await rt.set(ref, value); } catch (e) {
+        try {
+          if (dev) await rt.update(rt.ref(rdb), { ["moves/" + id]: value, ["movedev/" + id]: dev });
+          else await rt.set(ref, value);
+        } catch (e) {
           inflight.delete(id);
           const s = await rt.get(ref).catch(() => null);
           if (s && s.exists()) tell(code, key, s.val());
@@ -344,6 +359,52 @@
     rtdbSetExpire(code, at) {
       loadDb().then(({ rt, rdb }) => rt.set(rt.ref(rdb, "games/" + code + "/expireAt"), Number(at)))
         .catch(e => console.warn("The room's expiry wasn't renewed: " + words(e)));
+    },
+
+    // ---- Seat holds (#238, net's SeatHold): hold/{uid}/{code}, which of this player's devices plays their seat. Only the
+    // player reads and writes their own; JSON in and out, "" for no node.
+
+    /** The signed-in player's hold for room [code] as the server has it now. */
+    rtdbHoldRead(uid, code, ok, fail) {
+      loadDb().then(async ({ rt, rdb }) => {
+        const s = await rt.get(rt.ref(rdb, `hold/${uid}/${code}`));
+        return s.exists() ? JSON.stringify(s.val()) : "";
+      }).then(ok, e => fail(words(e)));
+    },
+
+    /** Changes the hold in a transaction: [f] gets the node as JSON ("" for none) and gives the node to write; [ok] gets what was written. */
+    rtdbHoldChange(uid, code, f, ok, fail) {
+      loadDb().then(async ({ rt, rdb }) => {
+        const ref = rt.ref(rdb, `hold/${uid}/${code}`);
+        const res = await rt.runTransaction(ref, cur => JSON.parse(f(cur === null ? "" : JSON.stringify(cur))), { applyLocally: false });
+        if (!res.committed || !res.snapshot.exists()) throw new Error("The seat wasn't claimed");
+        return JSON.stringify(res.snapshot.val());
+      }).then(ok, e => fail(words(e)));
+    },
+
+    /** Every change of the hold node; stopped with unobserve(handle). */
+    rtdbHoldWatch(uid, code, onValue, onError) {
+      const handle = nextHandle++;
+      const w = { code: null, stops: [], closed: false, tell: null };
+      watching.set(handle, w);
+      loadDb().then(({ rt, rdb }) => {
+        if (w.closed) return;
+        w.stops.push(rt.onValue(rt.ref(rdb, `hold/${uid}/${code}`), s => { if (!w.closed) onValue(s.exists() ? JSON.stringify(s.val()) : ""); },
+          e => { if (!w.closed) onError(words(e)); }));
+      }).catch(e => { if (!w.closed) onError(words(e)); });
+      return handle;
+    },
+
+    /** All of the player's holds, JSON {code: node}. */
+    rtdbHoldList(uid, ok, fail) {
+      loadDb().then(async ({ rt, rdb }) => {
+        const s = await rt.get(rt.ref(rdb, `hold/${uid}`));
+        return s.exists() ? JSON.stringify(s.val()) : "";
+      }).then(ok, e => fail(words(e)));
+    },
+
+    rtdbHoldDrop(uid, code, ok, fail) {
+      loadDb().then(({ rt, rdb }) => rt.remove(rt.ref(rdb, `hold/${uid}/${code}`))).then(() => ok(), e => fail(words(e)));
     },
 
     /** devices/{code}/{uid}: what this player plays the room on, for QA only (privacy policy 4a); a refusal changes nothing. */
@@ -403,6 +464,93 @@
         }));
       }).catch(e => { if (!w.closed) onError(words(e)); });
       return handle;
+    },
+
+    /**
+     * The people this player played with (#72), from the same Firestore list as the app's (users/{uid}/met), as JSON
+     * [{uid, name, lastPlayed (ms), games, starred}]; an entry missing a field is left out, as the app does. Signs nobody in.
+     */
+    friends(ok, fail) {
+      load().then(async ({ fs, db, au }) => {
+        await au.authStateReady();
+        const me = au.currentUser;
+        if (!me) return "[]";
+        const out = [];
+        (await fs.getDocs(fs.collection(db, "users", me.uid, "met"))).forEach(d => {
+          const v = d.data();
+          if (typeof v.name === "string" && v.lastPlayed && typeof v.lastPlayed.toMillis === "function" &&
+              typeof v.games === "number" && typeof v.starred === "boolean")
+            out.push({ uid: d.id, name: v.name, lastPlayed: v.lastPlayed.toMillis(), games: v.games, starred: v.starred });
+        });
+        return JSON.stringify(out);
+      }).then(ok, e => fail(words(e)));
+    },
+
+    /**
+     * Puts [uid] on this player's list (JSON {name, lastPlayed (ms), games, starred}) and, with the realtime store, the
+     * marker its invite rule reads (/met/{me}/{uid}, #196), both at once, as the app's AccountService.putFriend.
+     */
+    putFriend(uid, json, ok, fail) {
+      load().then(async ({ fs, db, au }) => {
+        const me = au.currentUser;
+        if (!me) throw new Error("Sign in first");
+        const f = JSON.parse(json);
+        const writes = [fs.setDoc(fs.doc(db, "users", me.uid, "met", uid),
+          { name: String(f.name).slice(0, 80), lastPlayed: fs.Timestamp.fromMillis(f.lastPlayed), games: f.games, starred: f.starred })];
+        if (globalThis.wgbgFirebaseConfig.options.databaseURL)
+          writes.push(loadDb().then(({ rt, rdb }) => rt.update(rt.ref(rdb), { [`met/${me.uid}/${uid}`]: true })));
+        await Promise.all(writes);
+      }).then(() => ok(), e => fail(words(e)));
+    },
+
+    /** Takes [uid] off this player's list, and its marker. */
+    forgetFriend(uid, ok, fail) {
+      load().then(async ({ fs, db, au }) => {
+        const me = au.currentUser;
+        if (!me) throw new Error("Sign in first");
+        const writes = [fs.deleteDoc(fs.doc(db, "users", me.uid, "met", uid))];
+        if (globalThis.wgbgFirebaseConfig.options.databaseURL)
+          writes.push(loadDb().then(({ rt, rdb }) => rt.update(rt.ref(rdb), { [`met/${me.uid}/${uid}`]: null })));
+        await Promise.all(writes);
+      }).then(() => ok(), e => fail(words(e)));
+    },
+
+    /**
+     * The rooms that invite this player (#72, the app's RealtimeTransport.observeInvites): their trusted list
+     * (/invites/{uid}), and each room on it read whenever the list changes. [onRooms] gets JSON {uid, rooms: {code: the
+     * room's JSON, or "" when it can't be read}}; the page's code decides which still invite them and clears the others
+     * ([clearInvite]). Stopped with unobserve(handle).
+     */
+    watchInvites(onRooms, onError) {
+      const handle = nextHandle++;
+      const w = { code: null, stops: [], closed: false, tell: null };
+      watching.set(handle, w);
+      loadDb().then(async ({ rt, rdb }) => {
+        const { au } = await load();
+        await au.authStateReady();
+        const me = au.currentUser;
+        if (w.closed || !me) return;
+        let round = 0;
+        w.stops.push(rt.onValue(rt.ref(rdb, "invites/" + me.uid), async s => {
+          const mine = ++round;
+          const codes = s.exists() ? Object.keys(s.val()) : [];
+          const rooms = {};
+          await Promise.all(codes.map(async c => {
+            try { const r = await rt.get(rt.ref(rdb, "games/" + c)); rooms[c] = r.exists() ? JSON.stringify(r.val()) : ""; }
+            catch (e) { rooms[c] = ""; }
+          }));
+          if (!w.closed && mine === round) onRooms(JSON.stringify({ uid: me.uid, rooms }));
+        }, e => { if (!w.closed) onError(words(e)); }));
+      }).catch(e => { if (!w.closed) onError(words(e)); });
+      return handle;
+    },
+
+    /** Clears this player's invite entry for room [code] (gone, started, or no longer inviting them). */
+    clearInvite(code) {
+      loadDb().then(async ({ rt, rdb }) => {
+        const { au } = await load();
+        if (au.currentUser) await rt.remove(rt.ref(rdb, `invites/${au.currentUser.uid}/${code}`));
+      }).catch(() => {});
     },
 
     unobserve(handle) {

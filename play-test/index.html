@@ -29,6 +29,15 @@
   #turn-sideways svg { animation: wgbg-tilt 2.4s ease-in-out infinite; }
   @keyframes wgbg-tilt { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
   @media (prefers-reduced-motion: reduce) { #turn-sideways svg { animation: none; } }
+  /* No install needed (LeRoy, 2026-11-10: Chrome's "Install app" offer worried him; Mauro: keep installing as an option,
+     but say plainly the game runs right here in the browser). Shown once, when the browser makes its install offer. */
+  #no-install { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); z-index: 9; max-width: min(520px, calc(100% - 32px));
+    display: none; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 12px; box-sizing: border-box;
+    background: linear-gradient(#4a2c14, #2c180a); border: 2px solid #c9a24a; box-shadow: 0 6px 18px #000a;
+    font-family: Georgia, "Times New Roman", serif; color: #f3e3b5; font-size: 15px; line-height: 1.35; }
+  #no-install.shown { display: flex; }
+  #no-install button { font: inherit; font-weight: bold; color: #2c180a; cursor: pointer; padding: 8px 14px; min-height: 40px;
+    border-radius: 10px; border: 2px solid #7a5418; background: linear-gradient(#f6d77e, #c9a24a 60%, #a37a2c); flex: none; }
   </style>
   <!-- The 3D board's three.js (live3d.js, #278 web-boards), the web game's pinned release; fetched only once the 3D board
        is chosen. wgbgImport keeps that import out of the app's bundle. -->
@@ -46,6 +55,42 @@
       <p class="hint" id="turn-sideways-hint">If the screen doesn't turn, switch on auto-rotate.</p>
     </div>
   </div>
+  <div id="no-install" role="status"><span id="no-install-text">No need to install anything: the game plays right here in your browser. Installing is optional and only adds an icon.</span>
+    <button id="no-install-ok" type="button">Got it</button></div>
+  <script>
+    // The browser offers to install the game (Chrome's "Install app"): say once that nothing needs installing. The offer
+    // itself stays: installing is an option, never needed. The words follow the game's language, like the card below.
+    (() => {
+      const box = document.getElementById("no-install");
+      document.documentElement.appendChild(box);   // Compose clears <body>
+      const words = {
+        en: ["No need to install anything: the game plays right here in your browser. Installing is optional and only adds an icon.", "Got it"],
+        de: ["Du musst nichts installieren: das Spiel läuft direkt hier im Browser. Installieren ist freiwillig und legt nur ein Symbol an.", "Verstanden"],
+        it: ["Non serve installare niente: il gioco funziona qui nel browser. Installarlo è facoltativo e aggiunge solo un'icona.", "Ho capito"],
+        es: ["No hace falta instalar nada: el juego funciona aquí mismo en tu navegador. Instalarlo es opcional y solo añade un icono.", "Entendido"],
+        fr: ["Rien à installer : le jeu fonctionne ici même, dans ton navigateur. L'installer est facultatif et ajoute seulement une icône.", "Compris"],
+        pt: ["Não precisa instalar nada: o jogo funciona aqui mesmo no navegador. Instalar é opcional e só adiciona um ícone.", "Entendi"],
+      };
+      const order = ["en", "de", "it", "es", "fr", "pt"];
+      let lang = null, seen = false;
+      try { const k = Math.round(parseFloat(localStorage.getItem("wgbg-app-settings:language"))); if (k >= 1) lang = order[k - 1]; } catch (e) {}
+      try { seen = localStorage.getItem("wgbg-no-install-seen") === "1"; } catch (e) {}
+      if (!lang) lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+      const w = words[lang] || words.en;
+      document.getElementById("no-install-text").textContent = w[0];
+      const ok = document.getElementById("no-install-ok");
+      ok.textContent = w[1];
+      ok.addEventListener("click", () => { box.classList.remove("shown"); try { localStorage.setItem("wgbg-no-install-seen", "1"); } catch (e) {} });
+      // Not preventDefault(): the browser's own install button stays where it was.
+      // It goes by itself after 12 s (tutor round 2: left up, it covered the game's top banner for a whole game), and
+      // counts as seen once shown, so it says its piece once.
+      if (!seen) addEventListener("beforeinstallprompt", () => {
+        box.classList.add("shown");
+        try { localStorage.setItem("wgbg-no-install-seen", "1"); } catch (e) {}
+        setTimeout(() => box.classList.remove("shown"), 12000);
+      }, { once: true });
+    })();
+  </script>
   <script>
     // The card's words in the game's language: the one picked in Settings (wgbg-app-settings:language, 0 = the
     // phone's, then I18n.languages' order), else the browser's.
@@ -103,6 +148,12 @@
       } catch (e) {}
       // The 3D board's models this page serves (models/index.json): the game places only these (WebGameDevice.liveModels).
       try { const r = await fetch("models/index.json"); if (r.ok) globalThis.wgbgModels = await r.json(); } catch (e) {}
+      // The Master bot's networks (value-*.onnx, the phone's own files): read into the bot before the app starts (WebMain.kt
+      // loadNets). Without them Master plays as the Strong bot, as a phone with a missing model does.
+      globalThis.wgbgNets = {};
+      await Promise.all(["value-base.onnx", "value-chivalry.onnx"].map(async n => {
+        try { const r = await fetch(n); if (r.ok) globalThis.wgbgNets[n] = new Uint8Array(await r.arrayBuffer()); } catch (e) {}
+      }));
       for (const src of ["firebase-live.js", "firebase-config.js", "fire.js", "ui.js"]) {
         const s = document.createElement("script"); s.src = src; s.async = false; document.body.appendChild(s);
       }
