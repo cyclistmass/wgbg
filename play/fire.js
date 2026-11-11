@@ -346,6 +346,12 @@
         .catch(e => console.warn("The room's expiry wasn't renewed: " + words(e)));
     },
 
+    /** devices/{code}/{uid}: what this player plays the room on, for QA only (privacy policy 4a); a refusal changes nothing. */
+    rtdbSetDevice(code, uid, doc, ok, fail) {
+      loadDb().then(({ rt, rdb }) => rt.set(rt.ref(rdb, "devices/" + code + "/" + uid), toRtdb(rt, JSON.parse(doc))))
+        .then(() => ok(), e => fail(words(e)));
+    },
+
     /**
      * The room and its moves from [afterKey] on (the app's observeMoves). The room is read from the server first and given
      * before any move, so the roster naming a move's sender is there; then the live listeners. Moves come to [onMoves] as

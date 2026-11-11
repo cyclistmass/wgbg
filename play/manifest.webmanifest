@@ -1,0 +1,11 @@
+{
+  "name": "Working German Board Game",
+  "short_name": "WGBG",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#140b05",
+  "theme_color": "#140b05",
+  "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+}

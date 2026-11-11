@@ -1,0 +1,94 @@
+{
+ "version": 1,
+ "updated": "2026-10-31",
+ "sizes": {
+  "3": {
+   "anchors_measured": true,
+   "rated_games": 0,
+   "bots": [
+    {
+     "name": "Master",
+     "label": "Master 0.3.9",
+     "elo": 1812
+    },
+    {
+     "name": "Strong",
+     "label": "Strong",
+     "elo": 1500
+    },
+    {
+     "name": "Greedy",
+     "label": "Greedy",
+     "elo": 1365
+    }
+   ],
+   "players": []
+  },
+  "4": {
+   "anchors_measured": false,
+   "rated_games": 0,
+   "bots": [
+    {
+     "name": "Master",
+     "label": "Master 0.3.9",
+     "elo": 1812
+    },
+    {
+     "name": "Strong",
+     "label": "Strong",
+     "elo": 1500
+    },
+    {
+     "name": "Greedy",
+     "label": "Greedy",
+     "elo": 1365
+    }
+   ],
+   "players": []
+  },
+  "5": {
+   "anchors_measured": false,
+   "rated_games": 0,
+   "bots": [
+    {
+     "name": "Master",
+     "label": "Master 0.3.9",
+     "elo": 1812
+    },
+    {
+     "name": "Strong",
+     "label": "Strong",
+     "elo": 1500
+    },
+    {
+     "name": "Greedy",
+     "label": "Greedy",
+     "elo": 1365
+    }
+   ],
+   "players": []
+  },
+  "6": {
+   "anchors_measured": false,
+   "rated_games": 0,
+   "bots": [
+    {
+     "name": "Master",
+     "label": "Master 0.3.9",
+     "elo": 1812
+    },
+    {
+     "name": "Strong",
+     "label": "Strong",
+     "elo": 1500
+    },
+    {
+     "name": "Greedy",
+     "label": "Greedy",
+     "elo": 1365
+    }
+   ],
+   "players": []
+  }
+ }
+}

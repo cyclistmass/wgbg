@@ -6,7 +6,7 @@
   "renderer": "model3d",
   "theme": "classic_3d",
   "camera": { "kind": "ortho", "tilt_max": 0.96, "piece_view_deg": 10 },
-  "water": { "kind": "model", "level": -0.24, "animated": true },
+  "water": { "kind": "model", "level": -0.24, "animated": true, "texture": { "file": "ocean_tile", "tile": 7 } },
   "supplies": false,
   "text": { "font": "sans", "min_px": 0 },
   "harbour": { "out": 0.80, "plain_out": 0.58, "away_from": "own-hex" },
