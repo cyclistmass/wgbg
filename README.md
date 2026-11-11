@@ -7,6 +7,18 @@ It is not affiliated with or endorsed by Catan GmbH: see [Trademarks](#trademark
 **Play it:** [in your browser](https://cyclistmass.github.io/wgbg/play/) · [download the Android APK](https://github.com/cyclistmass/wgbg/releases/latest/download/working-german-board-game.apk)
 · [all releases](https://github.com/cyclistmass/wgbg/releases)
 
+## Screenshots
+
+![Four bots playing the base game on a tilted board](docs/gameplay-1x.gif)
+
+![Age of Chivalry in the Pirate theme](docs/gameplay-chivalry.gif)
+
+| | |
+|---|---|
+| ![The tilted board mid-game](docs/screenshots/board-tilted.jpg) | ![Age of Chivalry endgame, Pirate theme](docs/screenshots/chivalry-endgame.jpg) |
+| ![Your pieces on the water](docs/screenshots/your-pieces.jpg) | ![The trade chest](docs/screenshots/trade-chest.jpg) |
+| ![Inventory](docs/screenshots/inventory.jpg) | ![Settings](docs/screenshots/settings.jpg) |
+
 This repository holds the game's releases, the web game (`play/`) and the page that opens invite links (`join/`). The game tells you in-app
 when a new version is out.
 
