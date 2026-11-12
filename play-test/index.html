@@ -12,10 +12,10 @@
       const t0 = performance.now(), lines = [];
       const box = document.createElement("pre");
       box.style.cssText = "position:fixed;left:4px;bottom:4px;z-index:2147483647;margin:0;padding:4px 6px;max-width:70vw;" +
-        "max-height:45vh;overflow:hidden;font:11px/1.25 monospace;color:#0f0;background:#000c;pointer-events:none;white-space:pre-wrap";
+        "max-height:80vh;overflow:hidden;font:11px/1.25 monospace;color:#0f0;background:#000c;pointer-events:none;white-space:pre-wrap";
       const head = document.createElement("div"), body = document.createElement("div");
       box.append(head, body);
-      const add = m => { lines.push(((performance.now() - t0) / 1000).toFixed(1) + "s " + m); if (lines.length > 14) lines.shift(); body.textContent = lines.join("\n"); };
+      const add = m => { lines.push(((performance.now() - t0) / 1000).toFixed(1) + "s " + m); if (lines.length > 30) lines.shift(); body.textContent = lines.join("\n"); };
       window.wgbgDiag = add;
       const mount = () => { if (!box.isConnected) document.documentElement.appendChild(box); };
       mount(); addEventListener("DOMContentLoaded", mount);
@@ -25,13 +25,22 @@
       HTMLCanvasElement.prototype.getContext = function (kind, ...rest) {
         const ctx = getContext.call(this, kind, ...rest);
         if (ctx && !canvases.includes(this) && /webgl/.test(kind)) {
-          canvases.push(this); add("got " + kind + " context");
+          canvases.push(this); add("got " + kind + " context, asked " + JSON.stringify(rest[0] || {}));
+          // v2 (#372): what this phone's WebGL offers, to tell which graphics step returns nothing.
+          try {
+            const g = ctx, d = g.getExtension("WEBGL_debug_renderer_info");
+            add("gl " + g.getParameter(g.VERSION) + " | " + (d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)));
+            add("gl got " + JSON.stringify(g.getContextAttributes()) + " lost " + g.isContextLost());
+            add("gl maxTex " + g.getParameter(g.MAX_TEXTURE_SIZE) + " maxRb " + g.getParameter(g.MAX_RENDERBUFFER_SIZE) +
+              " samples " + g.getParameter(g.SAMPLES) + " stencil " + g.getParameter(g.STENCIL_BITS) + " err " + g.getError());
+          } catch (e) { add("gl info failed " + e); }
           this.addEventListener("webglcontextlost", () => add("WEBGL CONTEXT LOST"));
           this.addEventListener("webglcontextrestored", () => add("webgl context restored"));
         }
         return ctx;
       };
-      addEventListener("error", e => add("ERROR " + (e.message || e) + " @" + (e.lineno || "")));
+      addEventListener("error", e => add("ERROR " + (e.message || e) + " @" + (e.lineno || "") +
+        (e.error && e.error.stack ? " | " + String(e.error.stack).replace(/\s+/g, " ").slice(0, 600) : "")));
       addEventListener("unhandledrejection", e => add("REJECT " + (e.reason && (e.reason.message || e.reason))));
       const err = console.error; console.error = (...a) => { add("console.error " + a.map(String).join(" ").slice(0, 160)); err.apply(console, a); };
       addEventListener("resize", () => add("resize " + innerWidth + "x" + innerHeight));
@@ -205,13 +214,13 @@
       // 2. On an iPhone or iPad the canvas draws at most 2 device pixels per CSS pixel (iPhones report 3): a third of the
       //    memory less per canvas, and Safari keeps the old and the new one while the screen turns.
       const upright = matchMedia("(orientation: portrait) and (pointer: coarse)");
-      if (upright.matches) await new Promise(go => {
+      if (upright.matches && !/[?&]nowait\b/.test(location.search)) await new Promise(go => {
         const check = () => { if (!upright.matches) { upright.removeEventListener("change", check); go(); } };
         upright.addEventListener("change", check);
       });
       const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       const ratio = Object.getOwnPropertyDescriptor(Window.prototype, "devicePixelRatio") || Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
-      if (apple && ratio && ratio.get) {
+      if (apple && ratio && ratio.get && !/[?&]dpr=native\b/.test(location.search)) {
         try { Object.defineProperty(window, "devicePixelRatio", { configurable: true, get() { return Math.min(2, ratio.get.call(window)); } }); } catch (e) {}
       }
       if (window.wgbgDiag) window.wgbgDiag("starting the game");
