@@ -154,6 +154,22 @@
       await Promise.all(["value-base.onnx", "value-chivalry.onnx"].map(async n => {
         try { const r = await fetch(n); if (r.ok) globalThis.wgbgNets[n] = new Uint8Array(await r.arrayBuffer()); } catch (e) {}
       }));
+      // #372: an iPhone opened upright, then turned sideways, showed a white page (a tester, 2026-11-11). Two changes,
+      // until a real iPhone shows which one it needed:
+      // 1. On a touch screen held upright the card covers the game anyway: start the game only once the screen is
+      //    sideways, so the first turn needs no resize of the game's canvas.
+      // 2. On an iPhone or iPad the canvas draws at most 2 device pixels per CSS pixel (iPhones report 3): a third of the
+      //    memory less per canvas, and Safari keeps the old and the new one while the screen turns.
+      const upright = matchMedia("(orientation: portrait) and (pointer: coarse)");
+      if (upright.matches) await new Promise(go => {
+        const check = () => { if (!upright.matches) { upright.removeEventListener("change", check); go(); } };
+        upright.addEventListener("change", check);
+      });
+      const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const ratio = Object.getOwnPropertyDescriptor(Window.prototype, "devicePixelRatio") || Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
+      if (apple && ratio && ratio.get) {
+        try { Object.defineProperty(window, "devicePixelRatio", { configurable: true, get() { return Math.min(2, ratio.get.call(window)); } }); } catch (e) {}
+      }
       for (const src of ["firebase-live.js", "firebase-config.js", "fire.js", "ui.js"]) {
         const s = document.createElement("script"); s.src = src; s.async = false; document.body.appendChild(s);
       }
