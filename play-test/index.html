@@ -39,6 +39,29 @@
         }
         return ctx;
       };
+      // v4 (#372): the crash hits a different graphics object each time, which looks like the graphics engine's memory
+      // running out on the iPhone. Every WebAssembly memory the page makes is tracked: its size shows in the top line
+      // and on the error screen, each growth past another 64 MB is logged, and a growth Safari refuses says so.
+      const mems = []; window.__wgbgMems = mems;
+      const mb = n => Math.round(n / 1048576);
+      const memLine = () => "mem " + (mems.length ? mems.map(m => { try { return mb(m.buffer.byteLength); } catch (e) { return "?"; } }).join("+") + " MB" : "none");
+      const track = m => { if (m instanceof WebAssembly.Memory && !mems.includes(m)) { mems.push(m); add("memory #" + mems.length + " " + mb(m.buffer.byteLength) + " MB"); } };
+      const grow = WebAssembly.Memory.prototype.grow;
+      WebAssembly.Memory.prototype.grow = function (pages) {
+        track(this);
+        const before = this.buffer.byteLength;
+        try {
+          const r = grow.call(this, pages);
+          if (Math.floor(this.buffer.byteLength / 67108864) > Math.floor(before / 67108864)) add("memory grew to " + mb(this.buffer.byteLength) + " MB");
+          return r;
+        } catch (e) { add("MEMORY GROW REFUSED at " + mb(before) + " MB (+" + Math.round(pages / 16) + " MB): " + e.message); throw e; }
+      };
+      for (const f of ["instantiate", "instantiateStreaming"]) {
+        const orig = WebAssembly[f];
+        if (orig) WebAssembly[f] = function (...a) {
+          return orig.apply(this, a).then(r => { try { const ex = (r.instance || r).exports; for (const k in ex) track(ex[k]); } catch (e) {} return r; });
+        };
+      }
       // v3 (#372): on an error, the whole screen becomes the error's stack, one call per line, names only (no file
       // addresses), so one screenshot holds every frame; it scrolls if it is still too long.
       let shown = false;
@@ -49,7 +72,8 @@
         const full = document.createElement("pre");
         full.style.cssText = "position:fixed;inset:0;z-index:2147483647;margin:0;padding:6px;overflow:auto;-webkit-overflow-scrolling:touch;" +
           "font:10px/1.15 monospace;color:#0f0;background:#000;white-space:pre-wrap;word-break:break-all";
-        full.textContent = "#372 ERROR " + msg + "\n" + calls.slice(0, 80).map((c, i) => i + " " + c.slice(0, 140)).join("\n");
+        full.textContent = "#372 ERROR " + msg + "\n" + memLine() + " | " + innerWidth + "x" + innerHeight + " dpr " + devicePixelRatio +
+          " | screen " + (window.__wgbgScreen || "-") + "\n" + lines.filter(l => /memory|MEMORY|LOST/.test(l)).slice(-6).join("\n") + "\n" + calls.slice(0, 80).map((c, i) => i + " " + c.slice(0, 140)).join("\n");
         document.documentElement.appendChild(full);
       };
       addEventListener("error", e => {
@@ -66,7 +90,7 @@
         mount();
         const c = canvases[0];
         head.textContent = "clock " + ((performance.now() - t0) / 1000).toFixed(1) + "s frames " + frames + " | " + innerWidth + "x" + innerHeight +
-          " dpr " + devicePixelRatio + " | screen " + (window.__wgbgScreen || "-") +
+          " dpr " + devicePixelRatio + " | screen " + (window.__wgbgScreen || "-") + " | " + memLine() +
           " | canvas " + (c ? c.width + "x" + c.height + " css " + c.clientWidth + "x" + c.clientHeight : "none");
       }, 250);
       add("diag on, " + navigator.userAgent.replace(/^Mozilla\/5\.0 /, "").slice(0, 120));
