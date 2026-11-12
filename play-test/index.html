@@ -39,8 +39,23 @@
         }
         return ctx;
       };
-      addEventListener("error", e => add("ERROR " + (e.message || e) + " @" + (e.lineno || "") +
-        (e.error && e.error.stack ? " | " + String(e.error.stack).replace(/\s+/g, " ").slice(0, 600) : "")));
+      // v3 (#372): on an error, the whole screen becomes the error's stack, one call per line, names only (no file
+      // addresses), so one screenshot holds every frame; it scrolls if it is still too long.
+      let shown = false;
+      const showStack = (msg, stack) => {
+        if (shown) return; shown = true;
+        const calls = String(stack || "").split("\n").map(l => l.trim()).filter(Boolean)
+          .map(l => l.replace(/@?(https?:|blob:|webpack:)\S*/g, "").replace(/\s+/g, " ").trim()).filter(Boolean);
+        const full = document.createElement("pre");
+        full.style.cssText = "position:fixed;inset:0;z-index:2147483647;margin:0;padding:6px;overflow:auto;-webkit-overflow-scrolling:touch;" +
+          "font:10px/1.15 monospace;color:#0f0;background:#000;white-space:pre-wrap;word-break:break-all";
+        full.textContent = "#372 ERROR " + msg + "\n" + calls.slice(0, 80).map((c, i) => i + " " + c.slice(0, 140)).join("\n");
+        document.documentElement.appendChild(full);
+      };
+      addEventListener("error", e => {
+        add("ERROR " + (e.message || e) + " @" + (e.lineno || ""));
+        showStack(e.message || e, e.error && e.error.stack);
+      });
       addEventListener("unhandledrejection", e => add("REJECT " + (e.reason && (e.reason.message || e.reason))));
       const err = console.error; console.error = (...a) => { add("console.error " + a.map(String).join(" ").slice(0, 160)); err.apply(console, a); };
       addEventListener("resize", () => add("resize " + innerWidth + "x" + innerHeight));
