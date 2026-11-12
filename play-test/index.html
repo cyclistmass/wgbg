@@ -4,6 +4,50 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Working German Board Game</title>
+  <script>
+    // #372 diagnostics, only with ?diag in the address: a text panel over the game that says what the page is doing, so
+    // an iPhone tester's screenshot shows whether the page froze (the clock stops), the canvas lost its drawing (a
+    // "context lost" line) or the game hit an error. It reads nothing private and sends nothing anywhere.
+    if (/[?&]diag\b/.test(location.search)) (() => {
+      const t0 = performance.now(), lines = [];
+      const box = document.createElement("pre");
+      box.style.cssText = "position:fixed;left:4px;bottom:4px;z-index:2147483647;margin:0;padding:4px 6px;max-width:70vw;" +
+        "max-height:45vh;overflow:hidden;font:11px/1.25 monospace;color:#0f0;background:#000c;pointer-events:none;white-space:pre-wrap";
+      const head = document.createElement("div"), body = document.createElement("div");
+      box.append(head, body);
+      const add = m => { lines.push(((performance.now() - t0) / 1000).toFixed(1) + "s " + m); if (lines.length > 14) lines.shift(); body.textContent = lines.join("\n"); };
+      window.wgbgDiag = add;
+      const mount = () => { if (!box.isConnected) document.documentElement.appendChild(box); };
+      mount(); addEventListener("DOMContentLoaded", mount);
+      let frames = 0; const loop = () => { frames++; requestAnimationFrame(loop); }; requestAnimationFrame(loop);
+      const canvases = [];
+      const getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (kind, ...rest) {
+        const ctx = getContext.call(this, kind, ...rest);
+        if (ctx && !canvases.includes(this) && /webgl/.test(kind)) {
+          canvases.push(this); add("got " + kind + " context");
+          this.addEventListener("webglcontextlost", () => add("WEBGL CONTEXT LOST"));
+          this.addEventListener("webglcontextrestored", () => add("webgl context restored"));
+        }
+        return ctx;
+      };
+      addEventListener("error", e => add("ERROR " + (e.message || e) + " @" + (e.lineno || "")));
+      addEventListener("unhandledrejection", e => add("REJECT " + (e.reason && (e.reason.message || e.reason))));
+      const err = console.error; console.error = (...a) => { add("console.error " + a.map(String).join(" ").slice(0, 160)); err.apply(console, a); };
+      addEventListener("resize", () => add("resize " + innerWidth + "x" + innerHeight));
+      addEventListener("orientationchange", () => add("orientationchange"));
+      addEventListener("pagehide", () => add("pagehide"));
+      document.addEventListener("visibilitychange", () => add("visibility " + document.visibilityState));
+      setInterval(() => {
+        mount();
+        const c = canvases[0];
+        head.textContent = "clock " + ((performance.now() - t0) / 1000).toFixed(1) + "s frames " + frames + " | " + innerWidth + "x" + innerHeight +
+          " dpr " + devicePixelRatio + " | screen " + (window.__wgbgScreen || "-") +
+          " | canvas " + (c ? c.width + "x" + c.height + " css " + c.clientWidth + "x" + c.clientHeight : "none");
+      }, 250);
+      add("diag on, " + navigator.userAgent.replace(/^Mozilla\/5\.0 /, "").slice(0, 120));
+    })();
+  </script>
   <link rel="icon" href="icon-192.png">
   <!-- Added to a home screen, the game opens full screen and sideways (the app is landscape only). -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -170,6 +214,7 @@
       if (apple && ratio && ratio.get) {
         try { Object.defineProperty(window, "devicePixelRatio", { configurable: true, get() { return Math.min(2, ratio.get.call(window)); } }); } catch (e) {}
       }
+      if (window.wgbgDiag) window.wgbgDiag("starting the game");
       for (const src of ["firebase-live.js", "firebase-config.js", "fire.js", "ui.js"]) {
         const s = document.createElement("script"); s.src = src; s.async = false; document.body.appendChild(s);
       }
