@@ -1,10 +1,10 @@
 {
  "version": 1,
- "updated": "2026-11-11",
+ "updated": "2026-10-31",
  "sizes": {
   "3": {
    "anchors_measured": true,
-   "rated_games": 26,
+   "rated_games": 0,
    "bots": [
     {
      "name": "Master",
@@ -22,22 +22,7 @@
      "elo": 1365
     }
    ],
-   "players": [
-    {
-     "id": "da0d1d320bbc",
-     "name": "Erin",
-     "elo": 1820,
-     "sd": 80,
-     "games": 21
-    },
-    {
-     "id": "9e66f5aec2e7",
-     "name": "Mauro",
-     "elo": 1797,
-     "sd": 88,
-     "games": 18
-    }
-   ]
+   "players": []
   },
   "4": {
    "anchors_measured": false,
