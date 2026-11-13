@@ -17,6 +17,7 @@
     align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
     font-family: Georgia, "Times New Roman", serif; color: #f3e3b5; text-align: center; }
   @media (orientation: portrait) and (pointer: coarse) { #turn-sideways { display: flex; } }
+  @media (orientation: portrait) { html.phone #turn-sideways { display: flex; } }
   #turn-sideways .plate { max-width: 360px; padding: 28px 22px; border-radius: 18px;
     background: linear-gradient(#4a2c14, #2c180a); border: 3px solid #c9a24a;
     box-shadow: inset 0 0 0 2px #6b4a1c, 0 8px 24px #000a; }
@@ -130,13 +131,18 @@
       // is. Leave full screen with Back and it stays out while you stay on the page. But Chrome also drops full screen
       // whenever the page is hidden (Home, another app, the notification shade): coming back, the next tap takes the
       // game full screen again. A tap Chrome refuses (a drag, not a tap) leaves it armed for the next one.
-      if (el.requestFullscreen && matchMedia("(pointer: coarse)").matches) {
+      // A phone: a coarse pointer, or a mobile browser with touch points (Firefox on Android can report a fine pointer).
+      // The tap is caught on pointerup, which every phone browser counts as a user's gesture (Firefox on Android sends no
+      // touchend there).
+      const phone = matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints > 0 && /Android|Mobi/i.test(navigator.userAgent));
+      if (phone) el.classList.add("phone");   // the turn-sideways card (CSS above) for phones without a coarse pointer
+      if (el.requestFullscreen && phone) {
         let armed = false;
         const once = async () => {
-          document.removeEventListener("touchend", once, true); armed = false;
+          document.removeEventListener("pointerup", once, true); armed = false;
           if (!(await goFull())) arm();
         };
-        const arm = () => { if (!armed && !document.fullscreenElement) { armed = true; document.addEventListener("touchend", once, true); } };
+        const arm = () => { if (!armed && !document.fullscreenElement) { armed = true; document.addEventListener("pointerup", once, true); } };
         arm();
         document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") arm(); });
       }
