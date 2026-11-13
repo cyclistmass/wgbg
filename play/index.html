@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- First, so a crash while the page loads is caught too: it goes to Firestore `crashes` by itself (#372). -->
+  <script src="build.js"></script>
+  <script src="crash.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Working German Board Game</title>
   <link rel="icon" href="icon-192.png">
