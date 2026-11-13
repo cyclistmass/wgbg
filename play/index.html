@@ -117,8 +117,9 @@
       const full = document.getElementById("turn-sideways-full");
       const el = document.documentElement;
       const goFull = async () => {
-        try { if (!document.fullscreenElement) await el.requestFullscreen({ navigationUI: "hide" }); } catch (e) { return; }
+        try { if (!document.fullscreenElement) await el.requestFullscreen({ navigationUI: "hide" }); } catch (e) { return false; }
         try { await screen.orientation.lock("landscape"); } catch (e) {}
+        return true;
       };
       if (el.requestFullscreen && screen.orientation && screen.orientation.lock) {
         full.hidden = false;
@@ -126,10 +127,18 @@
       }
       // The app plays full screen; a phone's browser keeps its address bar, about a quarter of a landscape screen
       // (303 of 411 dp on a Pixel 8). So on a touch screen the first tap also takes the game full screen, as the app
-      // is. Once per visit: leave full screen (Back) and it stays out.
+      // is. Leave full screen with Back and it stays out while you stay on the page. But Chrome also drops full screen
+      // whenever the page is hidden (Home, another app, the notification shade): coming back, the next tap takes the
+      // game full screen again. A tap Chrome refuses (a drag, not a tap) leaves it armed for the next one.
       if (el.requestFullscreen && matchMedia("(pointer: coarse)").matches) {
-        const once = () => { document.removeEventListener("touchend", once, true); goFull(); };
-        document.addEventListener("touchend", once, true);
+        let armed = false;
+        const once = async () => {
+          document.removeEventListener("touchend", once, true); armed = false;
+          if (!(await goFull())) arm();
+        };
+        const arm = () => { if (!armed && !document.fullscreenElement) { armed = true; document.addEventListener("touchend", once, true); } };
+        arm();
+        document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") arm(); });
       }
     })();
   </script>
