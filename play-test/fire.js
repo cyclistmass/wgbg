@@ -561,4 +561,6 @@
       watching.delete(handle);
     },
   };
+  // A crash while the page loaded (crash.js) waited for this bridge: it goes now.
+  if (globalThis.wgbgCrash) globalThis.wgbgCrash.fireReady();
 })();
